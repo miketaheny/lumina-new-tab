@@ -1,0 +1,3765 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumina</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --glass: rgba(255, 255, 255, 0.07);
+      --glass-border: rgba(255, 255, 255, 0.13);
+      --glass-hover: rgba(255, 255, 255, 0.12);
+      --text: rgba(255, 255, 255, 0.72);
+      --text-muted: rgba(255, 255, 255, 0.42);
+      --accent: #a78bfa;
+      --accent2: #60a5fa;
+      --blur: blur(20px);
+      --r: 16px;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ─── BACKGROUND CANVAS ─── */
+    #bg-wallpaper {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0;
+      transition: opacity 0.9s ease;
+    }
+
+    #bg-wallpaper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+    }
+
+    #bg-wallpaper.active {
+      opacity: 1;
+    }
+
+    body.wallpaper-active #bg-canvas {
+      opacity: 0;
+    }
+
+    body.wallpaper-active #clock {
+      color: rgba(255, 255, 255, 0.75);
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+    }
+
+    body.wallpaper-active #date {
+      color: rgba(255, 255, 255, 0.55);
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+    }
+
+    body.wallpaper-active #greeting {
+      filter: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.5));
+    }
+
+    body.wallpaper-active #focus {
+      color: rgba(255, 255, 255, 0.65);
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+    }
+
+    body.wallpaper-active #search-form {
+      background: rgba(0, 0, 0, 0.35);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    body.wallpaper-active #search-input {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    body.wallpaper-active #search-input::placeholder {
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    body.wallpaper-active #weather {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      transition: opacity 0.8s ease;
+    }
+
+    /* ─── GRAIN OVERLAY ─── */
+    #grain {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+    }
+
+    /* ─── MAIN LAYOUT ─── */
+    #app {
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      transition: padding-right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.notes-open #app {
+      padding-right: calc(clamp(340px, 33.33vw, 580px) + 24px);
+    }
+
+    @media (max-width: 768px) {
+      body.notes-open #app {
+        padding-right: 24px;
+      }
+    }
+
+    /* ─── TOP BAR ─── */
+    #topbar {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0 0;
+      opacity: 0;
+      animation: fadeUp 0.5s ease 0.1s forwards;
+    }
+
+    #clock-wrap {
+      text-align: left;
+    }
+
+    #clock {
+      font-family: 'Inter', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    #date {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: rgba(255, 255, 255, 0.35);
+      text-transform: uppercase;
+      margin-top: 1px;
+    }
+
+    #weather {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.45);
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    #weather:hover #weather-temp {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    #weather:hover #weather-cond {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    #weather:hover #weather-loc {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    #weather-icon {
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    #weather-temp {
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 500;
+    }
+
+    #weather-cond {
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    #weather-loc {
+      color: rgba(255, 255, 255, 0.28);
+      font-size: 11px;
+    }
+
+    #topbar-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .icon-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur);
+      color: var(--text-muted);
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 15px;
+    }
+
+    .icon-btn:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+
+    /* ─── HERO ─── */
+    #hero {
+      margin-top: 64px;
+      text-align: center;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.2s forwards;
+    }
+
+    #greeting {
+      font-family: 'Inter', sans-serif;
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, rgba(255, 255, 255, 0.55));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 6px;
+    }
+
+    #focus {
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      color: rgba(255, 255, 255, 0.38);
+      text-transform: uppercase;
+      min-height: 1.4em;
+    }
+
+    /* ─── SEARCH BAR ─── */
+    #search-wrap {
+      margin-top: 36px;
+      width: 100%;
+      max-width: 640px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.3s forwards;
+      position: relative;
+      z-index: 10;
+    }
+
+    #search-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(28px) saturate(1.4);
+      border-radius: 18px;
+      padding: 6px 6px 6px 20px;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+
+    #search-form:focus-within {
+      border-color: rgba(167, 139, 250, 0.5);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1), 0 8px 40px rgba(0, 0, 0, 0.25);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    #claude-logo {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+      opacity: 0.85;
+      cursor: pointer;
+      user-select: none;
+      padding: 3px 6px;
+      border-radius: 6px;
+      margin: -3px -6px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    #claude-logo:hover {
+      background: rgba(167, 139, 250, 0.12);
+      opacity: 1;
+    }
+
+    /* Per-engine brand colors */
+    #claude-logo[data-engine="claude"] {
+      color: #d4825a;
+    }
+
+    #claude-logo[data-engine="claude"]:hover {
+      background: rgba(212, 130, 90, 0.12);
+    }
+
+    #claude-logo[data-engine="gemini"] {
+      color: #8ab4f8;
+    }
+
+    #claude-logo[data-engine="gemini"]:hover {
+      background: rgba(138, 180, 248, 0.12);
+    }
+
+    #claude-logo[data-engine="chatgpt"] {
+      color: #10a37f;
+    }
+
+    #claude-logo[data-engine="chatgpt"]:hover {
+      background: rgba(16, 163, 127, 0.12);
+    }
+
+    #claude-logo[data-engine="perplexity"] {
+      color: #20b2c8;
+    }
+
+    #claude-logo[data-engine="perplexity"]:hover {
+      background: rgba(32, 178, 200, 0.12);
+    }
+
+    #claude-logo[data-engine="google"] {
+      color: #4285f4;
+    }
+
+    #claude-logo[data-engine="google"]:hover {
+      background: rgba(66, 133, 244, 0.12);
+    }
+
+    #claude-logo[data-engine="googleai"] {
+      color: #a8c7fa;
+    }
+
+    #claude-logo[data-engine="googleai"]:hover {
+      background: rgba(168, 199, 250, 0.12);
+    }
+
+    #claude-logo[data-engine="bing"] {
+      color: #008373;
+    }
+
+    #claude-logo[data-engine="bing"]:hover {
+      background: rgba(0, 131, 115, 0.12);
+    }
+
+    #claude-logo[data-engine="duckduckgo"] {
+      color: #ff5a00;
+    }
+
+    #claude-logo[data-engine="duckduckgo"]:hover {
+      background: rgba(255, 90, 0, 0.12);
+    }
+
+    #claude-logo[data-engine="github"] {
+      color: #a371f7;
+    }
+
+    #claude-logo[data-engine="github"]:hover {
+      background: rgba(163, 113, 247, 0.12);
+    }
+
+    #claude-logo[data-engine="stackoverflow"] {
+      color: #f48024;
+    }
+
+    #claude-logo[data-engine="stackoverflow"]:hover {
+      background: rgba(244, 128, 36, 0.12);
+    }
+
+    #search-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--glass-border);
+      flex-shrink: 0;
+    }
+
+    /* ─── ENGINE DROPDOWN ─── */
+    #engine-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      background: rgba(14, 10, 30, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      padding: 8px;
+      backdrop-filter: blur(28px);
+      min-width: 210px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      display: none;
+      z-index: 300;
+    }
+
+    #engine-dropdown.open {
+      display: block;
+    }
+
+    .eng-group-label {
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.3);
+      font-weight: 700;
+      padding: 6px 8px 4px;
+      margin-top: 4px;
+    }
+
+    .eng-group-label:first-child {
+      margin-top: 0;
+    }
+
+    .eng-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.62);
+    }
+
+    .eng-option:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .eng-option.active {
+      background: rgba(167, 139, 250, 0.15);
+    }
+
+    .eng-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    #search-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 400;
+      caret-color: var(--accent);
+      min-width: 0;
+    }
+
+    #search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    #search-btn {
+      flex-shrink: 0;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      color: #ffffff;
+      border-radius: 12px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 2px 12px rgba(167, 139, 250, 0.35);
+    }
+
+    #search-btn:hover {
+      filter: brightness(1.15);
+      transform: scale(1.05);
+    }
+
+    /* ─── QUICKLINKS SECTION ─── */
+    #ql-section {
+      margin-top: 52px;
+      width: 100%;
+      max-width: 860px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.45s forwards;
+    }
+
+    #ql-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    #ql-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    #add-link-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    #add-link-btn:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    /* ─── QUICKLINKS GRID ─── */
+    #ql-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .ql-section-items {
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 10px;
+      padding-bottom: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    }
+
+    .ql-section-items::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .ql-section-items::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .ql-section-items::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+    }
+
+    .ql-item {
+      /* background: var(--glass); border: 1px solid var(--glass-border); */
+      backdrop-filter: var(--blur);
+      border-radius: var(--r);
+      padding: 5px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      flex: 0 0 auto;
+      min-width: 180px;
+      transition: background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      text-decoration: none;
+      position: relative;
+      overflow: hidden;
+      animation: cardIn 0.35s ease both;
+    }
+
+    .ql-item::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      /* background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent); */
+      pointer-events: none;
+    }
+
+    .ql-item:hover {
+      background: var(--glass-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .ql-item:active {
+      transform: translateY(0);
+    }
+
+    .ql-favicon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .ql-favicon.fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .ql-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ql-label {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text);
+    }
+
+    .ql-url {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    .ql-actions {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 3px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      background: linear-gradient(to left, rgba(16, 12, 34, 0.92) 55%, transparent);
+      padding: 0 4px 0 20px;
+      border-radius: 8px;
+    }
+
+    .ql-item:hover .ql-actions {
+      opacity: 1;
+    }
+
+    .ql-action-btn {
+      background: rgba(0, 0, 0, 0.25);
+      border: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 12px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .ql-action-btn:hover {
+      background: rgba(0, 0, 0, 0.45);
+      color: var(--text);
+    }
+
+    .ql-action-btn.delete:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    /* drag handle */
+    .ql-drag-handle {
+      cursor: grab;
+      color: var(--text-muted);
+      font-size: 11px;
+      opacity: 0.2;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+      padding: 2px 3px;
+    }
+
+    .ql-item:hover .ql-drag-handle {
+      opacity: 0.6;
+    }
+
+    .ql-item.dragging {
+      opacity: 0.4;
+      border-style: dashed;
+    }
+
+    .ql-item.drag-over {
+      border-color: var(--accent);
+      background: rgba(167, 139, 250, 0.1);
+    }
+
+    /* ── ICON-ONLY MODE ── */
+    #ql-grid.icons-only .ql-section-items {
+      gap: 8px;
+    }
+
+    .ql-item.icon-only {
+      width: 72px;
+      min-width: 72px;
+      height: auto;
+      padding: 8px 4px 6px;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 0;
+    }
+
+    .ql-item.icon-only .ql-info,
+    .ql-item.icon-only .ql-drag-handle,
+    .ql-item.icon-only .ql-actions {
+      display: none !important;
+    }
+
+    .ql-item.icon-only .ql-favicon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+    }
+
+    .ql-item.icon-only .ql-favicon.fallback {
+      width: 44px;
+      height: 44px;
+      font-size: 20px;
+    }
+
+    .ql-icon-label {
+      width: 100%;
+      margin-top: 5px;
+      font-size: 10px;
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      text-align: center;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
+    }
+
+    /* Floating hover menu (icon mode only) */
+    #ql-float-menu {
+      position: fixed;
+      z-index: 200;
+      background: rgba(12, 9, 26, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 10px;
+      backdrop-filter: blur(24px);
+      min-width: 160px;
+      max-width: 200px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      display: none;
+      pointer-events: none;
+    }
+
+    #ql-float-menu.visible {
+      display: block;
+      pointer-events: auto;
+    }
+
+    #ql-float-menu-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.65);
+      padding: 0 2px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 8px;
+    }
+
+    #ql-float-menu-actions {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    /* ── SECTIONS ── */
+    .ql-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0 6px;
+      margin-top: 4px;
+    }
+
+    .ql-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      outline: none;
+      border: none;
+      background: none;
+      font-family: 'Inter', sans-serif;
+      cursor: text;
+      padding: 2px 5px;
+      border-radius: 5px;
+      min-width: 40px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .ql-section-label:focus {
+      color: var(--text);
+      background: var(--glass);
+    }
+
+    .ql-section-sep {
+      flex: 1;
+      height: 1px;
+      background: var(--glass-border);
+    }
+
+    .ql-section-caret {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 3px;
+      border-radius: 4px;
+      font-size: 8px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.18s, color 0.15s;
+    }
+
+    .ql-section-caret.expanded {
+      transform: rotate(90deg);
+    }
+
+    .ql-section-caret:hover {
+      color: var(--text);
+    }
+
+    .ql-section-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      transition: background 0.15s, color 0.15s;
+      opacity: 0;
+    }
+
+    .ql-section-header:hover .ql-section-btn {
+      opacity: 1;
+    }
+
+    .ql-section-btn:hover {
+      background: var(--glass);
+      color: var(--text);
+    }
+
+    .ql-section-del-btn:hover {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+
+    /* empty state */
+    #ql-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border: 1px dashed var(--glass-border);
+      border-radius: var(--r);
+      display: none;
+    }
+
+    /* ─── MODALS ─── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      animation: fadeIn 0.2s ease forwards;
+    }
+
+    .modal-backdrop.closing {
+      animation: fadeOut 0.2s ease forwards;
+    }
+
+    .modal {
+      background: rgba(18, 14, 32, 0.96);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 28px;
+      width: 440px;
+      max-width: calc(100vw - 32px);
+      transform: translateY(16px) scale(0.97);
+      animation: modalIn 0.25s ease forwards;
+    }
+
+    .modal.closing {
+      animation: modalOut 0.2s ease forwards;
+    }
+
+    .modal h2 {
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 7px;
+      font-weight: 500;
+    }
+
+    .field input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 13px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input:focus {
+      border-color: rgba(167, 139, 250, 0.5);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 22px;
+    }
+
+    /* ─── HEROICON PICKER ─── */
+    .ql-favicon.hero-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      color: var(--engine-color, #fff);
+      position: relative;
+      z-index: 1;
+    }
+
+    #modal-icon-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #modal-icon-preview {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+    }
+
+    #modal-icon-picker {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 3px;
+      max-height: 192px;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 8px;
+      margin-top: 8px;
+    }
+
+    .hero-icon-opt {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition: all 0.12s;
+    }
+
+    .hero-icon-opt:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+      border-color: var(--glass-border);
+    }
+
+    .hero-icon-opt.selected {
+      border-color: var(--accent);
+      background: rgba(167, 139, 250, 0.15);
+      color: var(--text);
+    }
+
+    .btn {
+      padding: 9px 20px;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-ghost {
+      background: var(--glass);
+      color: var(--text-muted);
+      border: 1px solid var(--glass-border);
+    }
+
+    .btn-ghost:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #1a0f2e;
+      box-shadow: 0 2px 12px rgba(167, 139, 250, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: #c4b5fd;
+      box-shadow: 0 4px 20px rgba(167, 139, 250, 0.45);
+    }
+
+    /* ─── SETTINGS PANEL (full-screen) ─── */
+    #settings-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 95;
+      background: rgba(8, 6, 20, 0.98);
+      backdrop-filter: blur(40px);
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.98);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    #settings-panel.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: scale(1);
+    }
+
+    #settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+
+    #settings-header-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    #settings-close-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    #settings-close-btn:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    #settings-version {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.4;
+      pointer-events: none;
+      font-family: monospace;
+      letter-spacing: 0.03em;
+    }
+
+    #settings-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr;
+      overflow: hidden;
+    }
+
+    .settings-col {
+      padding: 24px 28px;
+      overflow-y: auto;
+      border-right: 1px solid var(--glass-border);
+    }
+
+    .settings-col:last-child {
+      border-right: none;
+    }
+
+    .settings-section {
+      margin-bottom: 28px;
+    }
+
+    .settings-section-title {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+
+    .theme-card {
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+      min-height: 54px;
+    }
+
+    .theme-card.active {
+      border-color: var(--accent);
+    }
+
+    .theme-card .tc-name {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      position: relative;
+      z-index: 1;
+    }
+
+    .theme-card .tc-desc {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 2px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .theme-check {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+    }
+
+    .theme-card.active .theme-check {
+      display: flex;
+    }
+
+    .intensity-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .intensity-btn {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .intensity-btn.active {
+      background: rgba(167, 139, 250, 0.2);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .bg-mode-pane {
+      display: none;
+    }
+
+    .bg-mode-pane.active {
+      display: block;
+    }
+
+    /* wallpaper management */
+    #wp-add-form {
+      margin-top: 8px;
+      padding: 4px 10px 10px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+    }
+
+    #wp-add-form .wp-add-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    #wp-add-form input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      outline: none;
+    }
+
+    #wp-add-form input:focus {
+      border-color: rgba(167, 139, 250, 0.4);
+    }
+
+    .wp-emoji-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-bottom: 6px;
+      max-height: 72px;
+      overflow-y: auto;
+    }
+
+    .wp-emoji-opt {
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 5px;
+      transition: background 0.12s;
+      line-height: 1.3;
+    }
+
+    .wp-emoji-opt:hover {
+      background: var(--glass-hover);
+    }
+
+    .wp-emoji-opt.selected {
+      background: rgba(167, 139, 250, 0.2);
+      outline: 1px solid rgba(167, 139, 250, 0.4);
+    }
+
+    #wp-selected-emoji {
+      font-size: 18px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      cursor: pointer;
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      background: var(--glass);
+    }
+
+    .wp-upload-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .wp-upload-btn:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    .wp-add-btn {
+      background: rgba(167, 139, 250, 0.15);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .wp-add-btn:hover {
+      background: rgba(167, 139, 250, 0.25);
+    }
+
+    .wp-reset-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      padding: 4px 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.15s;
+    }
+
+    .wp-reset-btn:hover {
+      color: var(--text);
+    }
+
+    /* Wallpaper card layout */
+    .wp-card {
+      min-height: 81px;
+      display: flex;
+      align-items: flex-end;
+      padding: 8px 10px;
+    }
+
+    .wp-card .theme-check {
+      top: 6px;
+      left: 6px;
+      right: auto;
+      z-index: 3;
+    }
+
+    .wp-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+      pointer-events: none;
+      border-radius: 0 0 10px 10px;
+    }
+
+    .wp-card-btns {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      display: none;
+      flex-direction: row;
+      gap: 2px;
+      z-index: 3;
+    }
+
+    .theme-card:hover .wp-card-btns {
+      display: flex;
+    }
+
+    .wp-card-btn {
+      background: rgba(0, 0, 0, 0.55);
+      border: none;
+      color: rgba(255, 255, 255, 0.75);
+      border-radius: 4px;
+      width: 20px;
+      height: 20px;
+      font-size: 9px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.12s, color 0.12s;
+    }
+
+    .wp-card-btn:hover {
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+    }
+
+    .wp-card-btn.del:hover {
+      background: rgba(200, 50, 50, 0.7);
+      color: #fff;
+    }
+
+    .wp-card-edit-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 8, 20, 0.88);
+      border-radius: inherit;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      z-index: 4;
+    }
+
+    .wp-card-edit-emoji {
+      font-size: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .wp-card-edit-emoji:hover {
+      opacity: 0.7;
+    }
+
+    .wp-card-edit-title {
+      flex: 1;
+      min-width: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 10px;
+      font-family: 'Inter', sans-serif;
+      padding: 3px 5px;
+      outline: none;
+    }
+
+    .wp-card-edit-save,
+    .wp-card-edit-cancel {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: rgba(255, 255, 255, 0.8);
+      border-radius: 4px;
+      width: 20px;
+      height: 20px;
+      font-size: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .wp-card-edit-save:hover {
+      background: rgba(167, 139, 250, 0.4);
+      color: #fff;
+    }
+
+    .wp-card-edit-cancel:hover {
+      background: rgba(255, 100, 100, 0.3);
+      color: #fff;
+    }
+
+    /* focus line management */
+    #focus-lines-manage {
+      margin-top: 8px;
+    }
+
+    #focus-lines-list {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .focus-line-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: var(--glass);
+      border-radius: 7px;
+      font-size: 12px;
+    }
+
+    .focus-line-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-muted);
+    }
+
+    .focus-line-del {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 2px;
+      transition: color 0.12s;
+      flex-shrink: 0;
+    }
+
+    .focus-line-del:hover {
+      color: #fca5a5;
+    }
+
+    .focus-line-add-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .focus-line-add-row input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .focus-line-add-row input:focus {
+      border-color: rgba(167, 139, 250, 0.4);
+    }
+
+    .focus-api-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .focus-api-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .focus-api-btn:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    .focus-reset-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.15s;
+    }
+
+    .focus-reset-btn:hover {
+      color: var(--text);
+    }
+
+    /* toggle */
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+
+    .toggle-label {
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .toggle {
+      width: 40px;
+      height: 22px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      position: relative;
+      border: none;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on {
+      background: var(--accent);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .toggle.on::after {
+      transform: translateX(18px);
+    }
+
+    /* ─── BIBLE VERSE ─── */
+    #quote-wrap {
+      margin-top: auto;
+      padding-top: 40px;
+      text-align: center;
+      max-width: 480px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.6s forwards;
+    }
+
+    #quote-link {
+      display: inline-block;
+      text-decoration: none;
+      cursor: pointer;
+      border-radius: 12px;
+      padding: 12px 16px;
+      transition: background 0.2s;
+    }
+
+    #quote-link:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    #quote-link:hover #quote-author::after {
+      content: ' ↗';
+      opacity: 0.5;
+    }
+
+    #quote-text {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.4);
+      font-style: italic;
+      line-height: 1.7;
+      letter-spacing: 0.01em;
+    }
+
+    #quote-author {
+      margin-top: 6px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ─── ANIMATIONS ─── */
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+      }
+
+      to {
+        opacity: 0;
+      }
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes modalOut {
+      from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+
+      to {
+        opacity: 0;
+        transform: translateY(10px) scale(0.97);
+      }
+    }
+
+    @keyframes cardIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ─── OVERLAY DISMISS ─── */
+    #settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 89;
+      display: none;
+    }
+
+    #settings-overlay.open {
+      display: block;
+    }
+
+    /* ─── HELP PANEL ─── */
+    #help-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 89;
+      display: none;
+    }
+
+    #help-overlay.open {
+      display: block;
+    }
+
+    #help-panel {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 90;
+      width: 400px;
+      max-width: 100vw;
+      background: rgba(12, 9, 26, 0.97);
+      border-left: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px);
+      padding: 28px 24px;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+    }
+
+    #help-panel.open {
+      transform: translateX(0);
+    }
+
+    #help-panel h2 {
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    #help-panel .sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+
+    .help-section {
+      margin-bottom: 28px;
+    }
+
+    .help-section-title {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .help-row {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .help-row-label {
+      font-weight: 600;
+      color: var(--text);
+      min-width: 110px;
+      flex-shrink: 0;
+    }
+
+    .help-row-desc {
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .help-kbd {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--text);
+      white-space: nowrap;
+      margin: 0 2px;
+    }
+
+    .help-p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin-bottom: 8px;
+    }
+
+    .help-shortcuts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .help-shortcuts-table tr {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .help-shortcuts-table td {
+      padding: 5px 4px;
+      color: var(--text-muted);
+    }
+
+    .help-shortcuts-table td:first-child {
+      color: var(--text);
+      font-weight: 500;
+      width: 140px;
+    }
+
+    /* ─── TOOLTIP ─── */
+    [data-tip] {
+      position: relative;
+    }
+
+    [data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      font-size: 11px;
+      white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 6px;
+      pointer-events: none;
+    }
+
+    /* ─── EXPORT TABS ─── */
+    .export-tab {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .export-tab.active {
+      background: rgba(167, 139, 250, 0.2);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .export-tab:hover:not(.active) {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    /* ─── BM PREVIEW ITEMS ─── */
+    .bm-preview-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .bm-preview-item img {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .bm-preview-item span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ─── TOAST ─── */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(20, 16, 40, 0.95);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      z-index: 200;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ─── SCROLLBAR (settings panel) ─── */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+
+    /* ─── NOTES PANEL ─── */
+    #notes-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 89;
+      display: none;
+    }
+
+    #notes-overlay.open {
+      display: block;
+    }
+
+    #notes-panel {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 90;
+      width: clamp(340px, 33.33vw, 580px);
+      max-width: 100vw;
+      /* panel-scoped CSS variables — dark by default */
+      --text: rgba(255, 255, 255, 0.72);
+      --text-muted: rgba(255, 255, 255, 0.42);
+      --glass: rgba(255, 255, 255, 0.07);
+      --glass-border: rgba(255, 255, 255, 0.13);
+      --glass-hover: rgba(255, 255, 255, 0.12);
+      --p-bg: rgba(12, 9, 26, 0.97);
+      --p-caret: white;
+      --p-placeholder: rgba(255, 255, 255, 0.18);
+      --p-code-bg: rgba(255, 255, 255, 0.08);
+      --p-em: rgba(255, 255, 255, 0.58);
+      --p-chk-border: rgba(255, 255, 255, 0.28);
+      background: var(--p-bg);
+      border-left: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px);
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Light mode panel variables */
+    #notes-panel.panel-light {
+      --text: rgba(15, 10, 35, 0.72);
+      --text-muted: rgba(15, 10, 35, 0.45);
+      --glass: rgba(0, 0, 0, 0.04);
+      --glass-border: rgba(0, 0, 0, 0.1);
+      --glass-hover: rgba(0, 0, 0, 0.07);
+      --p-bg: rgba(248, 247, 255, 0.98);
+      --p-caret: #1a0f2e;
+      --p-placeholder: rgba(15, 10, 35, 0.2);
+      --p-code-bg: rgba(0, 0, 0, 0.06);
+      --p-em: rgba(15, 10, 35, 0.65);
+      --p-chk-border: rgba(15, 10, 35, 0.25);
+    }
+
+    @media (prefers-color-scheme: light) {
+      #notes-panel.panel-system {
+        --text: rgba(15, 10, 35, 0.72);
+        --text-muted: rgba(15, 10, 35, 0.45);
+        --glass: rgba(0, 0, 0, 0.04);
+        --glass-border: rgba(0, 0, 0, 0.1);
+        --glass-hover: rgba(0, 0, 0, 0.07);
+        --p-bg: rgba(248, 247, 255, 0.98);
+        --p-caret: #1a0f2e;
+        --p-placeholder: rgba(15, 10, 35, 0.2);
+        --p-code-bg: rgba(0, 0, 0, 0.06);
+        --p-em: rgba(15, 10, 35, 0.65);
+        --p-chk-border: rgba(15, 10, 35, 0.25);
+      }
+    }
+
+    #notes-panel.open {
+      transform: translateX(0);
+    }
+
+    @media (max-width: 768px) {
+      #notes-panel {
+        width: 100%;
+      }
+    }
+
+    body.notes-open #notes-btn {
+      display: none;
+    }
+
+    #notes-header {
+      display: flex;
+      align-items: center;
+      padding: 20px 20px 0;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .notes-tabs {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .notes-tab {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .notes-tab.active {
+      background: rgba(167, 139, 250, 0.15);
+      border-color: rgba(167, 139, 250, 0.3);
+      color: var(--text);
+    }
+
+    .notes-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* Note instance tabs */
+    #note-tabs-row {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 20px 0;
+      flex-shrink: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    #note-tabs-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .note-tab-btn {
+      padding: 4px 10px;
+      border-radius: 7px;
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+
+    .note-tab-btn.active {
+      background: var(--glass);
+      border-color: var(--glass-border);
+      color: var(--text);
+    }
+
+    .note-tab-btn:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .note-tab-del {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 1px;
+      opacity: 0;
+      transition: color 0.15s, opacity 0.15s;
+    }
+
+    .note-tab-btn:hover .note-tab-del,
+    .note-tab-btn.active .note-tab-del {
+      opacity: 0.6;
+    }
+
+    .note-tab-del:hover {
+      color: #fca5a5;
+      opacity: 1 !important;
+    }
+
+    .note-tab-add {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .note-tab-add:hover {
+      color: var(--text);
+      background: var(--glass);
+    }
+
+    .note-tab-rename-input {
+      background: none;
+      border: none;
+      outline: 1px solid rgba(167, 139, 250, 0.5);
+      border-radius: 3px;
+      color: inherit;
+      font: inherit;
+      padding: 0 2px;
+      min-width: 40px;
+      width: 6ch;
+    }
+
+    #notes-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+
+    #notes-close-btn:hover {
+      color: var(--text);
+      background: var(--glass);
+    }
+
+    .notes-tab-pane {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .notes-tab-pane.active {
+      display: flex;
+    }
+
+    /* Notes toolbar */
+    #notes-toolbar {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      padding: 10px 16px 8px;
+      border-bottom: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+
+    .md-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 8px;
+      border-radius: 6px;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .md-btn:hover {
+      background: var(--glass);
+      color: var(--text);
+    }
+
+    .md-btn.active {
+      background: rgba(167, 139, 250, 0.2);
+      color: var(--accent);
+    }
+
+    /* Notes: single-pane inline live (Typora/Obsidian style), stored as markdown */
+    #notes-editor {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      outline: none;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      caret-color: var(--p-caret);
+      min-height: 0;
+      word-wrap: break-word;
+    }
+
+    #notes-editor:empty::before {
+      content: 'Start writing…';
+      color: var(--p-placeholder);
+      font-style: italic;
+      pointer-events: none;
+    }
+
+    #notes-source {
+      display: none;
+      flex: 1;
+      padding: 16px 20px;
+      outline: none;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text);
+      font-family: monospace;
+      background: none;
+      border: none;
+      resize: none;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    #notes-source::placeholder {
+      color: var(--p-placeholder);
+      font-style: italic;
+    }
+
+    .md-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    #notes-editor h1 {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.5;
+      margin: 12px 0 4px;
+    }
+
+    #notes-editor h2 {
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.5;
+      margin: 10px 0 4px;
+    }
+
+    #notes-editor h3 {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.5;
+      margin: 8px 0 3px;
+    }
+
+    #notes-editor p {
+      margin-bottom: 1px;
+      min-height: 1.3em;
+    }
+
+    #notes-editor strong,
+    #notes-editor b {
+      font-weight: 700;
+    }
+
+    #notes-editor em,
+    #notes-editor i {
+      font-style: italic;
+      color: var(--p-em);
+    }
+
+    #notes-editor code {
+      background: var(--p-code-bg);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    #notes-editor ul {
+      padding-left: 20px;
+      margin: 3px 0 4px;
+    }
+
+    #notes-editor li {
+      margin-bottom: 2px;
+      line-height: 1.5;
+    }
+
+    #notes-editor a {
+      color: var(--accent);
+    }
+
+    #notes-editor hr {
+      border: none;
+      border-top: 1px solid var(--glass-border);
+      margin: 10px 0;
+    }
+
+    #notes-editor .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    #notes-editor .check-item[data-checked="true"] .check-text {
+      text-decoration: line-through;
+      opacity: 0.4;
+    }
+
+    #notes-editor .check-text {
+      flex: 1;
+      outline: none;
+      min-width: 0;
+    }
+
+    #notes-editor .note-chk {
+      background: none;
+      border: 1.5px solid var(--p-chk-border);
+      border-radius: 5px;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: transparent;
+      transition: all 0.15s;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #notes-editor .note-chk:hover {
+      border-color: var(--accent);
+      background: rgba(167, 139, 250, 0.12);
+    }
+
+    #notes-editor .note-chk.checked {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1a0f2e;
+    }
+
+    /* ─── SAVED LINKS IN PANEL ─── */
+    #saved-add-row {
+      padding: 14px 20px 0;
+      flex-shrink: 0;
+    }
+
+    #saved-add-btn {
+      width: 100%;
+      background: rgba(167, 139, 250, 0.08);
+      border: 1px dashed rgba(167, 139, 250, 0.3);
+      color: var(--accent);
+      border-radius: 10px;
+      padding: 9px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    #saved-add-btn:hover {
+      background: rgba(167, 139, 250, 0.16);
+      border-color: rgba(167, 139, 250, 0.5);
+    }
+
+    #saved-filters {
+      display: flex;
+      gap: 6px;
+      padding: 12px 20px 0;
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+    }
+
+    #saved-filters::-webkit-scrollbar {
+      display: none;
+    }
+
+    .saved-filter-chip {
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .saved-filter-chip:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+
+    #saved-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #saved-empty {
+      text-align: center;
+      padding: 36px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.7;
+      border: 1px dashed var(--glass-border);
+      border-radius: var(--r);
+      margin-top: 8px;
+    }
+
+    .saved-item {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s, border-color 0.2s;
+      animation: cardIn 0.25s ease both;
+    }
+
+    .saved-item:hover {
+      background: var(--glass-hover);
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .saved-item-favicon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      object-fit: cover;
+      background: var(--saved-favicon-bg, rgba(255, 255, 255, 0.92));
+    }
+
+    .fav-bg-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      border: 1.5px solid var(--glass-border);
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+      transition: border-color 0.15s;
+    }
+
+    .fav-bg-btn[data-bg="white"] {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    .fav-bg-btn[data-bg="dark"] {
+      background: rgba(20, 15, 40, 0.75);
+    }
+
+    .fav-bg-btn[data-bg="transparent"] {
+      background: transparent;
+      background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%), linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%);
+      background-size: 8px 8px;
+      background-position: 0 0, 4px 4px;
+    }
+
+    .fav-bg-btn.active {
+      border-color: var(--accent);
+    }
+
+    .saved-item-favicon.fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .saved-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .saved-item-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .saved-item-domain {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .saved-item-tags {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .saved-tag-chip {
+      display: inline-flex;
+      align-items: center;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      border: 1px solid transparent;
+    }
+
+    .saved-item-actions {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .saved-item-copy,
+    .saved-item-delete {
+      background: none;
+      border: none;
+      color: transparent;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 5px;
+      font-size: 12px;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .saved-item:hover .saved-item-copy,
+    .saved-item:hover .saved-item-delete {
+      color: var(--text-muted);
+    }
+
+    .saved-item-copy:hover {
+      color: #a5f3fc !important;
+      background: rgba(6, 182, 212, 0.15);
+    }
+
+    .saved-item-delete:hover {
+      color: #fca5a5 !important;
+      background: rgba(239, 68, 68, 0.15);
+    }
+
+    /* Tag color picker in modal */
+    .tag-colors-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 5px;
+    }
+
+    .tag-color-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.12s, border-color 0.12s;
+      padding: 0;
+      outline: none;
+      flex-shrink: 0;
+    }
+
+    .tag-color-swatch:hover {
+      transform: scale(1.2);
+    }
+
+    .tag-color-swatch.selected {
+      border-color: white;
+    }
+
+    .tag-selector-list {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      min-height: 24px;
+    }
+
+    .tag-toggle {
+      padding: 4px 11px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border: 1.5px solid transparent;
+      transition: all 0.15s;
+      opacity: 0.45;
+      background: none;
+    }
+
+    .tag-toggle.selected {
+      opacity: 1;
+    }
+
+    .new-tag-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--glass-border);
+    }
+
+    .new-tag-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .new-tag-input:focus {
+      border-color: rgba(167, 139, 250, 0.5);
+    }
+
+    .new-tag-add {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .new-tag-add:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="bg-wallpaper"></div>
+  <canvas id="bg-canvas"></canvas>
+  <div id="grain"></div>
+
+  <div id="app">
+
+    <!-- TOP BAR -->
+    <div id="topbar">
+      <div id="clock-wrap">
+        <div id="clock">--:--</div>
+        <div id="date"></div>
+        <div id="weather">
+          <span id="weather-icon"></span>
+          <span id="weather-temp"></span>
+          <span id="weather-cond"></span>
+          <span id="weather-loc"></span>
+        </div>
+      </div>
+      <div id="topbar-actions">
+        <button class="icon-btn" id="notes-btn" data-tip="Notes & Saved Links">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="help-btn" data-tip="User Guide">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="settings-btn" data-tip="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- HERO -->
+    <div id="hero">
+      <div id="greeting"></div>
+      <div id="focus"></div>
+    </div>
+
+    <!-- SEARCH -->
+    <div id="search-wrap">
+      <div style="position:relative;">
+        <div id="search-form">
+          <span id="claude-logo">Claude</span>
+          <div id="search-divider"></div>
+          <input id="search-input" type="text" placeholder="Ask Claude anything…" autocomplete="off" />
+          <button id="search-btn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFF" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+        <div id="engine-dropdown"></div>
+      </div>
+    </div>
+
+    <!-- QUICKLINKS -->
+    <div id="ql-section">
+      <div id="ql-header">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="bm-sync-badge"
+            style="display:none;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);opacity:0.8;background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:20px;border:1px solid rgba(167,139,250,0.2);">Synced</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="ql-icon-toggle" class="icon-btn" title="Toggle icon view"
+            style="width:32px;height:32px;padding:0;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+          </button>
+          <button id="export-btn" class="icon-btn" style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;"
+            data-tip="Export links">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export
+          </button>
+          <button id="bm-sync-btn" class="icon-btn"
+            style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;" data-tip="Sync from bookmarks folder">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+            Bookmarks
+          </button>
+          <button id="ql-add-section-btn" class="icon-btn"
+            style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;" title="Add section">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Section
+          </button>
+          <button id="add-link-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add Link
+          </button>
+        </div>
+      </div>
+      <div id="ql-grid">
+        <div id="ql-empty">No links yet. Click <strong>Add Link</strong> to get started.</div>
+      </div>
+    </div>
+
+    <!-- QUICKLINK FLOAT MENU -->
+    <div id="ql-float-menu">
+      <div id="ql-float-menu-label"></div>
+      <div id="ql-float-menu-actions"></div>
+    </div>
+
+    <!-- QUOTE -->
+    <div id="quote-wrap">
+      <a id="quote-link" target="_blank" rel="noopener">
+        <div id="quote-text"></div>
+        <div id="quote-author"></div>
+      </a>
+    </div>
+
+  </div>
+
+  <!-- HELP OVERLAY -->
+  <div id="help-overlay"></div>
+
+  <!-- HELP PANEL -->
+  <div id="help-panel">
+    <h2>Lumina Guide</h2>
+    <div class="sub">Everything you need to know</div>
+
+    <div class="help-section">
+      <div class="help-section-title">Search</div>
+      <p class="help-p">Type anything and press Enter — opens in a new tab. Click the engine label in the search bar to
+        open a dropdown with all engines. The send button color matches your chosen engine. Change the default engine in
+        Settings.</p>
+      <div class="help-row"><span class="help-row-label">Focus search bar</span><span class="help-row-desc"><kbd
+            class="help-kbd">/</kbd> from anywhere on the page</span></div>
+      <div class="help-row"><span class="help-row-label">AI engines</span><span class="help-row-desc">Claude, Gemini,
+          ChatGPT, Perplexity — query is pre-filled and auto-submitted</span></div>
+      <div class="help-row"><span class="help-row-label">Web engines</span><span class="help-row-desc">Google, Google AI
+          Mode, Bing, DuckDuckGo</span></div>
+      <div class="help-row"><span class="help-row-label">Dev engines</span><span class="help-row-desc">GitHub, Stack
+          Overflow</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Quick Links</div>
+      <p class="help-p">Bookmarks shown in a 4-column grid. Click any card to open it in the current tab. All actions
+        appear on hover.</p>
+      <div class="help-row"><span class="help-row-label">Add link</span><span class="help-row-desc">Add Link button (top
+          right of grid)</span></div>
+      <div class="help-row"><span class="help-row-label">Reorder</span><span class="help-row-desc">Drag the ⠿ handle on
+          the left of any card</span></div>
+      <div class="help-row"><span class="help-row-label">Hover actions</span><span class="help-row-desc">Open in new tab
+          · Copy URL · Edit · Delete</span></div>
+      <div class="help-row"><span class="help-row-label">Icon mode</span><span class="help-row-desc">Grid icon button →
+          compact favicon tiles; hover a tile for a floating action menu</span></div>
+      <div class="help-row"><span class="help-row-label">Sections</span><span class="help-row-desc">+ Section button →
+          named groups; click section label to rename; assign links via Edit</span></div>
+      <div class="help-row"><span class="help-row-label">Bookmark sync</span><span class="help-row-desc">Bookmarks
+          button → choose a Chrome folder; enable auto-sync or merge mode. Sync is bidirectional: adding, editing, or
+          deleting a link also updates Chrome bookmarks</span></div>
+      <div class="help-row"><span class="help-row-label">Export</span><span class="help-row-desc">Export button →
+          Markdown, Apple Notes, or plain text</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Notes</div>
+      <p class="help-p">Open the notepad icon (top bar) and select the Notes tab. Rich-text editor — everything saves
+        automatically on every keystroke.</p>
+      <div class="help-row"><span class="help-row-label">Multiple notes</span><span class="help-row-desc">+ button in
+          the tab row adds a new note; × on a tab deletes it; click tabs to switch</span></div>
+      <div class="help-row"><span class="help-row-label">Bold</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘B</kbd> / <kbd class="help-kbd">Ctrl+B</kbd></span></div>
+      <div class="help-row"><span class="help-row-label">Italic</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘I</kbd> / <kbd class="help-kbd">Ctrl+I</kbd></span></div>
+      <div class="help-row"><span class="help-row-label">Strikethrough</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘⇧X</kbd> / <kbd class="help-kbd">Ctrl+Shift+X</kbd> · also <code>~~text~~</code> on
+          paste</span></div>
+      <div class="help-row"><span class="help-row-label">Heading 1 / 2</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘1</kbd> / <kbd class="help-kbd">⌘2</kbd></span></div>
+      <div class="help-row"><span class="help-row-label">Inline code</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘E</kbd></span></div>
+      <div class="help-row"><span class="help-row-label">Bullet list</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘L</kbd> · Enter continues · Enter on empty line exits</span></div>
+      <div class="help-row"><span class="help-row-label">Checkbox</span><span class="help-row-desc"><kbd
+            class="help-kbd">⌘⇧C</kbd> · click to toggle done · Enter on empty exits</span></div>
+      <div class="help-row"><span class="help-row-label">Clear completed</span><span class="help-row-desc">✓× toolbar
+          button removes all ticked checklist items</span></div>
+      <div class="help-row"><span class="help-row-label">Paste Markdown</span><span class="help-row-desc">Detected
+          automatically and converted to rich text</span></div>
+      <div class="help-row"><span class="help-row-label">Copy as Markdown</span><span class="help-row-desc">"Copy MD"
+          toolbar button copies the entire note as Markdown</span></div>
+      <div class="help-row"><span class="help-row-label">Copy for Apple Notes</span><span class="help-row-desc">"Apple
+          Notes" toolbar button copies rich text — paste directly into Apple Notes</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Saved Links</div>
+      <p class="help-p">A personal reading list. Open the notepad icon → Saved Links tab. The panel can be Light, Dark,
+        or System themed independently of the background.</p>
+      <div class="help-row"><span class="help-row-label">Add from panel</span><span class="help-row-desc">+ Add Link
+          button inside the tab</span></div>
+      <div class="help-row"><span class="help-row-label">Save current tab</span><span class="help-row-desc">Click the
+          Lumina icon in Chrome's toolbar from any page</span></div>
+      <div class="help-row"><span class="help-row-label">Tags</span><span class="help-row-desc">Assign color-coded tags;
+          8 preset colors; create custom tags</span></div>
+      <div class="help-row"><span class="help-row-label">Filter by tag</span><span class="help-row-desc">Click a tag
+          chip in the filter row</span></div>
+      <div class="help-row"><span class="help-row-label">Sort</span><span class="help-row-desc">Newest first or A –
+          Z</span></div>
+      <div class="help-row"><span class="help-row-label">Hover actions</span><span class="help-row-desc">Copy URL ·
+          Delete</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Weather</div>
+      <p class="help-p">Displayed in the top-left corner. Settings → Weather to configure.</p>
+      <div class="help-row"><span class="help-row-label">Auto location</span><span class="help-row-desc">"Use my
+          location" toggle — browser asks permission once</span></div>
+      <div class="help-row"><span class="help-row-label">Postal override</span><span class="help-row-desc">Enter a
+          zip/postal code to lock to a specific location</span></div>
+      <div class="help-row"><span class="help-row-label">Units</span><span class="help-row-desc">°F / °C toggle in
+          Settings</span></div>
+      <div class="help-row"><span class="help-row-label">Refresh rate</span><span class="help-row-desc">Every 30
+          minutes; cached between refreshes</span></div>
+      <div class="help-row"><span class="help-row-label">Data source</span><span class="help-row-desc">Open-Meteo —
+          free, no API key needed</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Themes &amp; Wallpapers</div>
+      <p class="help-p">Settings → Background. Switch between Colors and Wallpaper tabs. Selected themes or wallpapers
+        rotate with each new tab open.</p>
+      <div class="help-row"><span class="help-row-label">Color themes</span><span class="help-row-desc">Cosmic · Aurora
+          · Sunset · Ocean · Forest · Ember · Minimal · Candy — select multiple to rotate</span></div>
+      <div class="help-row"><span class="help-row-label">Intensity</span><span class="help-row-desc">Subtle / Medium /
+          Vivid</span></div>
+      <div class="help-row"><span class="help-row-label">Dynamic wallpapers</span><span class="help-row-desc">Bing Daily
+          · NASA APOD · Wikimedia POTD — refreshed each day, rotate each tab</span></div>
+      <div class="help-row"><span class="help-row-label">Custom wallpaper</span><span class="help-row-desc">Upload one
+          or more images; filename becomes the title; edit emoji/title on the card. Only titles and selection sync (not
+          image data), so the gist stays small.</span></div>
+      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Saved Links
+          panel: Dark · Light · System (follows OS)</span></div>
+      <div class="help-row"><span class="help-row-label">Daily Focus</span><span class="help-row-desc">Settings → Daily
+          Focus — quotes rotate daily; fetch extras from ZenQuotes</span></div>
+      <div class="help-row"><span class="help-row-label">Greeting</span><span class="help-row-desc">Settings → Options —
+          add your name for "Good morning, Name" or switch to a fully custom greeting</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Auto-fill forms</div>
+      <p class="help-p">Add entries in Settings → Auto-fill forms. Then right-click on any page and choose
+        <strong>Auto-fill form with</strong> → an entry to fill inputs (name, email, phone, address, etc.). Entries sync
+        with your gist.
+      </p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Sync via GitHub Gist</div>
+      <p class="help-p">All data syncs across browsers (Chrome, Firefox, Safari, Edge) using a private GitHub Gist.
+        Settings → Sync.</p>
+      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Create a GitHub PAT
+          with <strong>gist</strong> scope → paste into Settings → Sync</span></div>
+      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates one main
+          gist (settings, links) and a separate gist per note — each note appears as its own gist in your GitHub Gists
+          list</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after any
+          change (links, settings, and each note as its own file)</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">On every new tab
+          open</span></div>
+      <div class="help-row"><span class="help-row-label">Manual</span><span class="help-row-desc">Sync Now button in
+          Settings</span></div>
+      <div class="help-row"><span class="help-row-label">No token</span><span class="help-row-desc">Extension works
+          normally without sync — nothing changes</span></div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Keyboard Shortcuts</div>
+      <table class="help-shortcuts-table">
+        <tr>
+          <td><kbd class="help-kbd">/</kbd></td>
+          <td>Focus the search bar</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">Escape</kbd></td>
+          <td>Close any open panel or modal</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘B</kbd> / <kbd class="help-kbd">Ctrl+B</kbd></td>
+          <td>Bold (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘I</kbd> / <kbd class="help-kbd">Ctrl+I</kbd></td>
+          <td>Italic (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘1</kbd> / <kbd class="help-kbd">Ctrl+1</kbd></td>
+          <td>Heading 1 (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘2</kbd> / <kbd class="help-kbd">Ctrl+2</kbd></td>
+          <td>Heading 2 (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘E</kbd> / <kbd class="help-kbd">Ctrl+E</kbd></td>
+          <td>Inline code (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘L</kbd> / <kbd class="help-kbd">Ctrl+L</kbd></td>
+          <td>Bullet list (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘⇧C</kbd> / <kbd class="help-kbd">Ctrl+Shift+C</kbd></td>
+          <td>Checkbox (in notes)</td>
+        </tr>
+        <tr>
+          <td><kbd class="help-kbd">⌘⇧X</kbd> / <kbd class="help-kbd">Ctrl+Shift+X</kbd></td>
+          <td>Strikethrough (in notes)</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- SETTINGS OVERLAY -->
+  <div id="settings-overlay"></div>
+
+  <!-- SETTINGS PANEL -->
+  <div id="settings-panel">
+    <div id="settings-header">
+      <span id="settings-header-title">Settings</span>
+      <button id="settings-close-btn">✕</button>
+    </div>
+    <div id="settings-body">
+      <div class="settings-col">
+
+        <div class="settings-section">
+          <div class="settings-section-title">Background</div>
+          <div class="toggle-row" style="margin-bottom:12px;">
+            <span class="toggle-label" id="bg-mode-label">Colors</span>
+            <button class="toggle" id="toggle-bg-mode"></button>
+          </div>
+          <div class="bg-mode-pane" id="bg-pane-colors">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.4;">Select one or more
+              color themes — they rotate with each new tab.</div>
+            <div class="theme-grid" id="theme-grid"></div>
+            <div style="margin-top:10px;">
+              <div class="settings-section-title" style="margin-bottom:8px;">Intensity</div>
+              <div class="intensity-row">
+                <button class="intensity-btn" data-intensity="subtle">Subtle</button>
+                <button class="intensity-btn" data-intensity="medium">Medium</button>
+                <button class="intensity-btn" data-intensity="vivid">Vivid</button>
+              </div>
+            </div>
+            <div class="toggle-row" style="margin-top:10px;">
+              <span class="toggle-label">Animate background</span>
+              <button class="toggle" id="toggle-animate"></button>
+            </div>
+          </div>
+          <div class="bg-mode-pane" id="bg-pane-wallpaper">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.4;">Select one or more
+              wallpapers — they rotate with each new tab. Dynamic sources refresh daily.</div>
+            <div id="wp-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"></div>
+            <div id="wp-add-form">
+              <button id="wp-add-toggle"
+                style="background:none;border:none;color:var(--text-muted);font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:5px;transition:color 0.15s;width:100%;">
+                <span id="wp-add-toggle-arrow" style="font-size:9px;transition:transform 0.15s;">▶</span> Add Wallpaper
+              </button>
+              <div id="wp-add-body" style="display:none;margin-top:8px;">
+                <div class="wp-add-row">
+                  <span id="wp-selected-emoji" title="Pick emoji">🖼️</span>
+                  <input id="wp-add-title" type="text" placeholder="Name" maxlength="30" />
+                  <label class="wp-upload-btn" title="Upload one or more images">
+                    📁 Upload
+                    <input id="wp-file-input" type="file" accept="image/*" multiple style="display:none" />
+                  </label>
+                </div>
+                <div class="wp-emoji-picker" id="wp-emoji-picker" style="display:none;"></div>
+                <input id="wp-add-url" type="url" placeholder="Image URL (or upload above)"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;outline:none;margin-bottom:6px;" />
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <button class="wp-add-btn" id="wp-add-btn">Add</button>
+                  <button class="wp-reset-btn" id="wp-reset-btn">Reset to defaults</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /settings-col 1 -->
+      <div class="settings-col">
+
+        <div class="settings-section">
+          <div class="settings-section-title">Daily Focus</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.4;">Quotes rotate through
+            your list daily, one per day.</div>
+          <div id="focus-lines-manage">
+            <div id="focus-lines-list"></div>
+            <div class="focus-line-add-row">
+              <input id="focus-line-input" type="text" placeholder="Add a focus line…" maxlength="80" />
+              <button class="wp-add-btn" id="focus-line-add-btn">Add</button>
+            </div>
+            <div class="focus-api-row">
+              <button class="focus-api-btn" id="focus-fetch-btn">✨ Fetch from API</button>
+              <button class="focus-reset-btn" id="focus-reset-btn">Reset to defaults</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Options</div>
+          <div class="toggle-row" style="margin-bottom:6px;">
+            <span class="toggle-label">Custom greeting</span>
+            <button class="toggle" id="toggle-greeting-custom"></button>
+          </div>
+          <div id="greeting-default-field" style="margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">Greeting name</label>
+            <input id="greeting-name-input" type="text" placeholder="e.g. Alex" maxlength="30"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;outline:none;box-sizing:border-box;" />
+          </div>
+          <div id="greeting-custom-field" style="margin-bottom:10px;display:none;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">Custom greeting
+              text</label>
+            <input id="greeting-custom-input" type="text" placeholder="Leave empty to hide" maxlength="80"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;outline:none;box-sizing:border-box;" />
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Show clock</span>
+            <button class="toggle" id="toggle-clock"></button>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Show verse</span>
+            <button class="toggle" id="toggle-quote"></button>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Grain overlay</span>
+            <button class="toggle" id="toggle-grain"></button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Auto-fill forms</div>
+          <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;">Right-click on any page
+            → <strong>Auto-fill form with</strong> → choose an entry. Add address book entries below; they sync with
+            your gist.</p>
+          <div id="address-book-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+          <button id="address-book-add-btn" type="button"
+            style="width:100%;padding:8px 12px;border-radius:8px;border:1px dashed var(--glass-border);background:rgba(167,139,250,0.08);color:var(--accent);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">+
+            Add entry</button>
+          <div id="address-book-form"
+            style="display:none;margin-top:12px;padding:12px;background:var(--glass);border-radius:10px;border:1px solid var(--glass-border);">
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:10px;"
+              id="address-book-form-title">New entry</div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Label (e.g. Home,
+                Work)</label><input id="ab-label" type="text" placeholder="Home" maxlength="24"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">First
+                  name</label><input id="ab-firstName" type="text" placeholder="John" maxlength="60"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+              </div>
+              <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Last
+                  name</label><input id="ab-lastName" type="text" placeholder="Doe" maxlength="60"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Full
+                name</label><input id="ab-name" type="text" placeholder="John Doe (or leave blank to use first + last)"
+                maxlength="120"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Email</label><input
+                id="ab-email" type="email" placeholder="john@example.com" maxlength="120"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Phone</label><input
+                id="ab-phone" type="tel" placeholder="+1 234 567 8900" maxlength="40"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label
+                style="font-size:10px;opacity:0.7;">Company</label><input id="ab-company" type="text"
+                placeholder="Acme Inc" maxlength="80"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Address line
+                1</label><input id="ab-address1" type="text" placeholder="123 Main St" maxlength="120"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">Address line
+                2</label><input id="ab-address2" type="text" placeholder="Apt 4" maxlength="120"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div class="field" style="margin-bottom:8px;"><label
+                  style="font-size:10px;opacity:0.7;">City</label><input id="ab-city" type="text" placeholder="City"
+                  maxlength="60"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+              </div>
+              <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">State /
+                  Province</label><input id="ab-state" type="text" placeholder="State" maxlength="60"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+              </div>
+              <div class="field" style="margin-bottom:8px;"><label style="font-size:10px;opacity:0.7;">ZIP /
+                  Postal</label><input id="ab-zip" type="text" placeholder="ZIP" maxlength="20"
+                  style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;" />
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:10px;"><label
+                style="font-size:10px;opacity:0.7;">Country</label><select id="ab-country"
+                style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box;cursor:pointer;">
+                <option value="">Select country</option>
+              </select></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+              <button type="button" id="address-book-cancel-btn"
+                style="padding:6px 12px;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:12px;cursor:pointer;">Cancel</button>
+              <button type="button" id="address-book-save-btn"
+                style="padding:6px 12px;border-radius:8px;border:1px solid rgba(167,139,250,0.4);background:rgba(167,139,250,0.2);color:var(--accent);font-size:12px;cursor:pointer;">Save</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-bottom:0">
+          <div class="settings-section-title">Search Engine</div>
+          <div class="field" style="margin-bottom:0">
+            <select id="search-engine-select"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;cursor:pointer;">
+              <optgroup label="AI">
+                <option value="claude">Claude (claude.ai)</option>
+                <option value="gemini">Gemini (gemini.google.com)</option>
+                <option value="chatgpt">ChatGPT (chatgpt.com)</option>
+                <option value="perplexity">Perplexity</option>
+              </optgroup>
+              <optgroup label="Web">
+                <option value="google">Google</option>
+                <option value="googleai">Google AI Mode</option>
+                <option value="bing">Bing</option>
+                <option value="duckduckgo">DuckDuckGo</option>
+              </optgroup>
+              <optgroup label="Developer">
+                <option value="github">GitHub</option>
+                <option value="stackoverflow">Stack Overflow</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+      </div><!-- /settings-col 2 -->
+      <div class="settings-col">
+
+        <div class="settings-section">
+          <div class="settings-section-title">Weather</div>
+          <div class="toggle-row" style="padding-top:0">
+            <span class="toggle-label">Use my location <span id="weather-loc-name"
+                style="opacity:0.5;font-size:10px;font-weight:400;margin-left:4px;"></span></span>
+            <button class="toggle" id="toggle-geo-location"></button>
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label style="opacity:0.6">Override with Postal / Zip Code</label>
+            <input id="weather-postal" type="text" placeholder="e.g. 10001 or SW1A 1AA" maxlength="12"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
+          </div>
+          <div class="toggle-row" style="padding-top:0;border-bottom:none">
+            <span class="toggle-label">Fahrenheit</span>
+            <button class="toggle" id="toggle-weather-unit"></button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Panel Theme</div>
+          <div style="display:flex;gap:6px;">
+            <button class="panel-theme-btn" data-theme="dark"
+              style="flex:1;padding:8px 6px;border-radius:9px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Dark</button>
+            <button class="panel-theme-btn" data-theme="light"
+              style="flex:1;padding:8px 6px;border-radius:9px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Light</button>
+            <button class="panel-theme-btn" data-theme="system"
+              style="flex:1;padding:8px 6px;border-radius:9px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">System</button>
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-bottom:0">
+          <div class="settings-section-title">Sync via GitHub Gist</div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Personal Access Token <span style="opacity:0.45;font-size:10px">(repo:gist scope)</span></label>
+            <input id="sync-pat" type="password" placeholder="ghp_xxxxxxxxxxxx" maxlength="200"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="sync-now-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Sync
+              Now</button>
+            <span id="sync-status"
+              style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
+          </div>
+          <div style="margin-top:8px;">
+            <a id="sync-gist-link" href="#"
+              style="display:none;font-size:12px;color:var(--accent);text-decoration:none;">Open gist on GitHub →</a>
+            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Main
+              gist has settings/links; each note is its own gist (see your Gists list). Sync once to create.</span>
+          </div>
+        </div>
+
+      </div><!-- /settings-col 3 -->
+    </div><!-- /settings-body -->
+    <div id="settings-version">2026.03.19.00.00.00</div>
+  </div>
+
+  <!-- NOTES OVERLAY -->
+  <div id="notes-overlay"></div>
+
+  <!-- NOTES PANEL -->
+  <div id="notes-panel">
+    <div id="notes-header">
+      <div class="notes-tabs">
+        <button class="notes-tab active" data-tab="notes">Notes</button>
+        <button class="notes-tab" data-tab="saved">Saved Links</button>
+      </div>
+      <button id="notes-close-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- NOTES TAB -->
+    <div id="notes-tab-content" class="notes-tab-pane active">
+      <div id="note-tabs-row"></div>
+      <div id="notes-toolbar">
+        <button class="md-btn" data-cmd="bold" title="Bold ⌘B"><strong>B</strong></button>
+        <button class="md-btn" data-cmd="italic" title="Italic ⌘I"><em>I</em></button>
+        <button class="md-btn" data-cmd="strike" title="Strikethrough ⌘⇧X"><s>S</s></button>
+        <button class="md-btn" data-cmd="h1" title="Heading 1 ⌘1">H1</button>
+        <button class="md-btn" data-cmd="h2" title="Heading 2 ⌘2">H2</button>
+        <button class="md-btn" data-cmd="code" title="Code ⌘E">&grave;</button>
+        <button class="md-btn" data-cmd="list" title="List ⌘L">—</button>
+        <button class="md-btn" data-cmd="check" title="Checkbox ⌘⇧C">☐</button>
+        <button class="md-btn" id="clear-checked-btn" title="Clear completed checklist items">✓×</button>
+        <button class="md-btn" id="undo-note-btn" title="Undo" disabled style="opacity:0.35;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7v6h6" />
+            <path d="M3 13C5.33 7.33 10 4 16 4a9 9 0 0 1 0 18H3" />
+          </svg>
+        </button>
+        <button class="md-btn" id="source-btn" title="Toggle source (markdown)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+        </button>
+        <div style="flex:1"></div>
+        <button class="md-btn" id="copy-md-btn" title="Copy as Markdown"
+          style="gap:4px;padding:5px 9px;font-size:10px;letter-spacing:0.04em;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          Copy MD
+        </button>
+        <button class="md-btn" id="copy-notes-btn" title="Copy as rich text — paste into Apple Notes"
+          style="gap:4px;padding:5px 9px;font-size:10px;letter-spacing:0.04em;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+          Apple Notes
+        </button>
+      </div>
+      <div id="notes-editor" contenteditable="true" spellcheck="true" data-gramm="false"></div>
+      <textarea id="notes-source" spellcheck="false" placeholder="Markdown source…"></textarea>
+    </div>
+
+    <!-- SAVED TAB -->
+    <div id="saved-tab-content" class="notes-tab-pane">
+      <div id="saved-add-row">
+        <button id="saved-add-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Add Link
+        </button>
+      </div>
+      <div id="saved-sort-row" style="display:flex;gap:4px;padding:8px 20px 0;flex-shrink:0;align-items:center;">
+        <button class="saved-sort-btn active" data-sort="date"
+          style="flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--glass-border);background:rgba(167,139,250,0.15);border-color:rgba(167,139,250,0.3);color:var(--text);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Newest</button>
+        <button class="saved-sort-btn" data-sort="title"
+          style="flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">A
+          – Z</button>
+        <div style="width:1px;height:16px;background:var(--glass-border);margin:0 2px;flex-shrink:0;"></div>
+        <button class="fav-bg-btn" data-bg="white" title="Light favicon background"></button>
+        <button class="fav-bg-btn" data-bg="dark" title="Dark favicon background"></button>
+        <button class="fav-bg-btn" data-bg="transparent" title="No favicon background"></button>
+      </div>
+      <div id="saved-filters"></div>
+      <div id="saved-list">
+        <div id="saved-empty">No saved links yet.<br><small style="opacity:0.6">Use the bookmark button in any tab to
+            save from anywhere.</small></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVE LINK MODAL -->
+  <div id="saved-modal" style="display:none" class="modal-backdrop">
+    <div class="modal">
+      <h2>Save Link</h2>
+      <div class="field">
+        <label>URL</label>
+        <input type="url" id="saved-modal-url" placeholder="https://example.com" />
+      </div>
+      <div class="field">
+        <label>Title <span style="opacity:0.5;font-size:10px">(optional)</span></label>
+        <input type="text" id="saved-modal-title" placeholder="Page title" />
+      </div>
+      <div class="field">
+        <label>Tags</label>
+        <div class="tag-selector-list" id="saved-tag-list"></div>
+        <div
+          style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;font-weight:600;">
+          New tag color</div>
+        <div class="tag-colors-row" id="saved-tag-colors"></div>
+        <div class="new-tag-row">
+          <input class="new-tag-input" id="saved-new-tag-input" type="text" placeholder="New tag name…"
+            maxlength="24" />
+          <button class="new-tag-add" id="saved-new-tag-add" type="button">Add Tag</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="saved-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="saved-modal-save">Save Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORT MODAL -->
+  <div id="export-modal" style="display:none" class="modal-backdrop">
+    <div class="modal" style="width:500px">
+      <h2>Export Quick Links</h2>
+
+      <div style="display:flex;gap:8px;margin-bottom:18px" id="export-tabs">
+        <button class="export-tab active" data-fmt="markdown">Markdown</button>
+        <button class="export-tab" data-fmt="apple-notes">Apple Notes</button>
+        <button class="export-tab" data-fmt="plain">Plain Text</button>
+      </div>
+
+      <div style="position:relative">
+        <textarea id="export-output" readonly style="width:100%;height:220px;background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);
+        border-radius:12px;padding:14px;color:var(--text);font-family:'DM Mono',monospace,sans-serif;
+        font-size:12px;line-height:1.7;resize:none;outline:none;"></textarea>
+        <div id="export-copy-toast" style="display:none;position:absolute;bottom:10px;right:10px;
+        background:var(--accent);color:#1a0f2e;font-size:11px;font-weight:600;padding:5px 12px;
+        border-radius:20px;pointer-events:none;">Copied!</div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="export-close">Close</button>
+        <button class="btn btn-primary" id="export-copy-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" style="margin-right:6px">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          Copy to Clipboard
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOOKMARK SYNC MODAL -->
+  <div id="bm-modal" style="display:none" class="modal-backdrop">
+    <div class="modal" style="width:480px">
+      <h2>Sync from Bookmarks</h2>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
+        Choose a bookmarks folder — all links inside will be synced to your Quick Links. They'll stay in sync each time
+        you open a new tab.
+      </p>
+
+      <div class="field">
+        <label>Select folder</label>
+        <select id="bm-folder-select"
+          style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);
+        border-radius:10px;padding:10px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;cursor:pointer;">
+          <option value="">Loading folders…</option>
+        </select>
+      </div>
+
+      <div id="bm-preview" style="display:none;margin-top:4px;margin-bottom:4px">
+        <div
+          style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;font-weight:500;">
+          Preview</div>
+        <div id="bm-preview-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+        </div>
+      </div>
+
+      <div
+        style="margin-top:16px;padding:12px;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);line-height:1.6">
+        <strong style="color:var(--accent);">Auto-sync</strong> — when enabled, links are refreshed from this folder
+        each time you open a new tab.
+        <div style="margin-top:8px" class="toggle-row">
+          <span class="toggle-label" style="font-size:12px">Keep auto-syncing</span>
+          <button class="toggle" id="toggle-bm-autosync"></button>
+        </div>
+      </div>
+
+      <div id="bm-merge-row"
+        style="margin-top:12px;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;"
+        class="toggle-row">
+        <span class="toggle-label" style="font-size:12px">Merge with existing links (don't replace)</span>
+        <button class="toggle on" id="toggle-bm-merge"></button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="bm-cancel">Cancel</button>
+        <button class="btn btn-primary" id="bm-apply">Sync Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD/EDIT LINK MODAL -->
+  <div id="link-modal" style="display:none" class="modal-backdrop">
+    <div class="modal">
+      <h2 id="modal-title">Add Quick Link</h2>
+      <div class="field">
+        <label>URL</label>
+        <input type="url" id="modal-url" placeholder="https://example.com" />
+      </div>
+      <div class="field">
+        <label>Title <span style="opacity:0.5;font-size:10px">(auto-detected)</span></label>
+        <input type="text" id="modal-label" placeholder="My Link" />
+      </div>
+      <div class="field" id="modal-section-row">
+        <label>Section</label>
+        <select id="modal-section"
+          style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;cursor:pointer;"></select>
+      </div>
+      <div class="field">
+        <label>Favicon</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:400;">
+            <input type="checkbox" id="modal-no-favicon" style="accent-color:var(--accent);width:14px;height:14px;" />
+            Use letter instead
+          </label>
+          <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+            <span style="font-size:11px;opacity:0.5;">Background</span>
+            <button type="button" class="modal-fav-bg-btn" data-bg="white"       title="Light"       style="width:20px;height:20px;border-radius:4px;border:1.5px solid var(--glass-border);background:rgba(255,255,255,0.85);cursor:pointer;padding:0;"></button>
+            <button type="button" class="modal-fav-bg-btn" data-bg="dark"        title="Dark"        style="width:20px;height:20px;border-radius:4px;border:1.5px solid var(--glass-border);background:rgba(20,15,40,0.75);cursor:pointer;padding:0;"></button>
+            <button type="button" class="modal-fav-bg-btn" data-bg="transparent" title="Transparent" style="width:20px;height:20px;border-radius:4px;border:1.5px solid var(--glass-border);background:transparent;background-image:linear-gradient(45deg,rgba(255,255,255,0.1) 25%,transparent 25%,transparent 75%,rgba(255,255,255,0.1) 75%),linear-gradient(45deg,rgba(255,255,255,0.1) 25%,transparent 25%,transparent 75%,rgba(255,255,255,0.1) 75%);background-size:8px 8px;background-position:0 0,4px 4px;cursor:pointer;padding:0;"></button>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Icon <span style="opacity:0.5;font-size:10px">(optional — overrides favicon)</span></label>
+        <div id="modal-icon-row">
+          <div id="modal-icon-preview"></div>
+          <button type="button" id="modal-icon-pick-btn" class="btn btn-ghost"
+            style="font-size:12px;padding:6px 12px;">Choose Icon</button>
+          <button type="button" id="modal-icon-clear-btn" class="btn btn-ghost"
+            style="font-size:12px;padding:6px 12px;opacity:0.6">Clear</button>
+        </div>
+        <div id="modal-icon-picker" style="display:none;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="modal-save">Save Link</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="newtab.js"></script>
+</body>
+
+</html>
