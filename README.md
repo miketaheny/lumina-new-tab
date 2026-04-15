@@ -61,35 +61,32 @@ Safari requires explicit permission to override the new tab page. After enabling
 
 ---
 
-## Sync via Obsidian (Local REST API)
+## Sync via Asana (Personal Access Token)
 
-Notes sync as `.md` files in your Obsidian vault's `Lumina/` folder using the [Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) plugin. Settings, links, and saved links are stored in `Lumina/.lumina-sync.json`.
+Notes sync as tasks in a private Asana project named **Lumina Notes**, created automatically the first time you connect. Each note is one task; note title = task name, note body = task `html_notes`. The project is created with `privacy_setting: 'private_to_me'` so no one else in your workspace can see it.
 
 ### Setup
 
-1. Install the **Local REST API** plugin in Obsidian and enable it.
-2. Copy the API key from the plugin settings.
-3. In Lumina, open **Settings → Sync** and enter the REST API URL (default `https://127.0.0.1:27124`) and the API key.
-4. Click **Sync Now** to perform the first sync.
+1. Create a **Personal Access Token** at [app.asana.com/0/my-apps](https://app.asana.com/0/my-apps) → **+ Create new token**. Copy it — you won't see it again.
+2. In Lumina, open **Settings → Sync** and paste the token into the **Asana Personal Access Token** field.
+3. If you belong to more than one workspace, pick the one to use from the dropdown.
+4. Click **Connect**. Lumina creates the **Lumina Notes** private project and pushes any existing local notes as new tasks.
 
 ### How it works
 
 | Behavior | Details |
 |---|---|
-| **Auto-push** | 3 seconds after any change (notes, links, settings) |
-| **Flush on background** | Pushes immediately when the tab is hidden, the window loses focus, or the tab is closed |
-| **Auto-pull on return** | When you switch back to the Lumina tab or refocus the Chrome window, it checks the vault for newer edits — non-conflicting changes are auto-merged into your local notes |
-| **Conflict handling** | If a note was edited in **both** Lumina and Obsidian since the last sync, a banner appears letting you choose which version to keep |
-| **Manual full sync** | Click **Sync Now** in Settings to do a full pull — files created in Obsidian are imported and files deleted from the vault are removed locally |
-| **Renames** | Renaming a note title updates the vault filename and cleans up the old file |
+| **Auto-push** | 3 seconds after any change, then flushed when the tab is hidden, window loses focus, or tab is closed |
+| **Auto-pull** | When you switch back to the Lumina tab (and it's been >30s since last sync), it checks Asana for task edits newer than your local copy |
+| **Conflict handling** | Last write wins, based on `modified_at`. If you edited in both places, the most recently modified version is kept |
+| **Deletes** | Deleting a note marks its Asana task complete (reversible — uncomplete the task in Asana to restore) |
+| **Renames** | Renaming a note title updates the task name |
 | **Status bar** | The notes panel shows a live connection indicator (green = connected, blue = syncing, red = disconnected) |
 | **Not configured** | The extension works normally without sync — notes are saved locally |
 
-### Self-signed certificate
+### Exports
 
-The Local REST API plugin uses HTTPS with a self-signed certificate by default. If you see "Failed to fetch", either:
-- Visit `https://127.0.0.1:27124` in your browser and accept the certificate, or
-- Use the HTTP endpoint instead: `http://127.0.0.1:27123`
+Quick Links, Saved Links, and your settings JSON can be downloaded from **Settings → Sync** as `.md` / `.json` files for manual backup.
 
 ---
 
@@ -107,13 +104,13 @@ The Local REST API plugin uses HTTPS with a self-signed certificate by default. 
 |---|---|
 | `open-meteo.com` | Weather forecast and geocoding (free, no API key) |
 | `bible-api.com` | Daily Bible verse (one request per day) |
-| `127.0.0.1:27123/27124` | Obsidian Local REST API sync (only when configured) |
+| `app.asana.com` | Asana notes sync (only when connected with a PAT) |
 | `www.bing.com` | Bing Daily wallpaper (only when selected) |
 | `api.nasa.gov` | NASA Astronomy Picture of the Day wallpaper (only when selected; uses `DEMO_KEY`) |
 | `en.wikipedia.org` | Wikimedia Picture of the Day wallpaper (only when selected) |
 | `zenquotes.io` | Fetch inspirational quotes for Daily Focus (only when triggered manually) |
 
-No personal data leaves your browser except through services you explicitly configure (Obsidian sync).
+No personal data leaves your browser except through services you explicitly configure (Asana sync).
 
 ---
 

@@ -2040,7 +2040,7 @@ function saveNotes() {
       note.content = tiptapEditor.storage.markdown.getMarkdown();
     }
   }
-  saveState({ skipSchedule: true }); // only push to Obsidian on Cmd+S or tab close
+  saveState({ skipSchedule: true }); // only push to Asana on Cmd+S or tab close
 }
 
 function renderNoteTabs() {
@@ -2171,11 +2171,7 @@ function deleteNote(id) {
   }
   saveState();
   renderNoteTabs();
-  clearSyncSnapshot(id);
-  if (deleted && isSyncConfigured()) {
-    const path = deleted.vaultPath || noteVaultPath(deleted);
-    obsidianDelete(path).then(r => { if (!r.ok && r.status !== 404) showToast(`⚠ Delete note: ${r.status}`); }).catch(() => {});
-  }
+  if (deleted?.asanaTaskGid) handleNoteDeletion(deleted.asanaTaskGid);
 }
 
 function htmlToMarkdown(html) {
@@ -2970,115 +2966,308 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
 }
 
 // ─── INIT ────────────────────────────────────────
-// ─── OBSIDIAN LOCAL REST API SYNC ─────────────────
-const OBSIDIAN_FOLDER = 'Lumina';
-const OBSIDIAN_SETTINGS_FILE = `${OBSIDIAN_FOLDER}/.lumina-sync.json`;
+// ─── ASANA SYNC (private project, task per note) ─────────────────
+const ASANA_API = 'https://app.asana.com/api/1.0';
+const ASANA_PROJECT_NAME = 'Lumina Notes';
 let syncDebounceTimer = null;
 let syncInProgress = false;
-let vaultCheckInProgress = false;
 let lastPullTime = 0;
-let vaultCheckInterval = null;
 
-// Sync snapshots: stores the content of each note at last successful sync
-// Used for three-way merge to detect which side changed
-function getSyncSnapshots() {
-  try { return JSON.parse(localStorage.getItem('lumina_sync_snapshots') || '{}'); } catch { return {}; }
+function getAsanaPat() { return (localStorage.getItem('lumina_asana_pat') || '').trim(); }
+function setAsanaPat(v) { localStorage.setItem('lumina_asana_pat', (v || '').trim()); }
+function getAsanaWorkspace() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_workspace') || 'null'); } catch { return null; }
 }
-function saveSyncSnapshots(snapshots) {
-  localStorage.setItem('lumina_sync_snapshots', JSON.stringify(snapshots));
+function setAsanaWorkspace(ws) { localStorage.setItem('lumina_asana_workspace', JSON.stringify(ws || null)); }
+function getAsanaProject() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_project') || 'null'); } catch { return null; }
 }
-function updateSyncSnapshot(noteId, content) {
-  const s = getSyncSnapshots();
-  s[noteId] = content.trim();
-  saveSyncSnapshots(s);
-}
-function clearSyncSnapshot(noteId) {
-  const s = getSyncSnapshots();
-  delete s[noteId];
-  saveSyncSnapshots(s);
+function setAsanaProject(p) { localStorage.setItem('lumina_asana_project', JSON.stringify(p || null)); }
+function isSyncConfigured() {
+  return !!(getAsanaPat() && getAsanaWorkspace()?.gid && getAsanaProject()?.gid);
 }
 
-function getSyncApiUrl() { return (localStorage.getItem('lumina_sync_api_url') || '').trim().replace(/\/+$/, ''); }
-function getSyncApiKey() { return (localStorage.getItem('lumina_sync_api_key') || '').trim(); }
-function isSyncConfigured() { return !!(getSyncApiUrl() && getSyncApiKey()); }
+function getAsanaModifiedMap() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_modified') || '{}'); } catch { return {}; }
+}
+function saveAsanaModifiedMap(m) { localStorage.setItem('lumina_asana_modified', JSON.stringify(m)); }
+function setAsanaModified(taskGid, iso) {
+  const m = getAsanaModifiedMap(); m[taskGid] = iso; saveAsanaModifiedMap(m);
+}
 
 function setSyncStatus(msg) {
   const el = document.getElementById('sync-status');
   if (el) el.textContent = msg;
-  setObsidianStatusText(msg);
+  setSyncBarText(msg);
 }
 
-function setObsidianStatus(state, msg) {
-  const bar = document.getElementById('obsidian-status-bar');
+function setSyncBar(state, msg) {
+  const bar = document.getElementById('sync-status-bar');
   if (!bar) return;
   bar.className = state; // 'connected', 'disconnected', 'syncing', or ''
-  const textEl = document.getElementById('obsidian-status-text');
+  const textEl = document.getElementById('sync-status-text');
+  if (textEl && msg) textEl.textContent = msg;
+}
+function setSyncBarText(msg) {
+  const textEl = document.getElementById('sync-status-text');
   if (textEl && msg) textEl.textContent = msg;
 }
 
-function setObsidianStatusText(msg) {
-  const textEl = document.getElementById('obsidian-status-text');
-  if (textEl && msg) textEl.textContent = msg;
-}
-
-function obsidianHeaders() {
-  return { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': 'text/markdown' };
-}
-
-function obsidianJsonHeaders() {
-  return { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': 'application/json' };
-}
-
-function noteVaultPath(note) {
-  const name = (note.title || note.id).replace(/[/\\?%*:|"<>#^[\]]/g, '-').trim() || note.id;
-  return `${OBSIDIAN_FOLDER}/${name}.md`;
-}
-
-function obsidianVaultUrl(path) {
-  // Encode each path segment individually — slashes must remain literal
-  return getSyncApiUrl() + '/vault/' + path.split('/').map(s => encodeURIComponent(s)).join('/');
-}
-
-async function obsidianPut(path, content, contentType) {
-  const url = obsidianVaultUrl(path);
-  const resp = await fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': contentType || 'text/markdown' },
-    body: content,
-  });
+async function asanaApi(path, opts = {}) {
+  const pat = getAsanaPat();
+  if (!pat) throw new Error('No Asana token configured');
+  const headers = {
+    Authorization: `Bearer ${pat}`,
+    Accept: 'application/json',
+    ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(opts.headers || {}),
+  };
+  const url = path.startsWith('http') ? path : `${ASANA_API}${path}`;
+  const resp = await fetch(url, { ...opts, headers });
   if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new Error(`PUT ${path}: ${resp.status} ${text.slice(0, 80)}`);
+    let detail = '';
+    try { const j = await resp.json(); detail = j?.errors?.[0]?.message || ''; } catch {}
+    throw new Error(`Asana ${resp.status}${detail ? `: ${detail}` : ''}`);
   }
-  return resp;
+  if (resp.status === 204) return null;
+  return resp.json();
 }
 
-async function obsidianGet(path) {
-  const url = obsidianVaultUrl(path);
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'text/markdown' },
-  });
-  return resp;
+async function asanaMe() {
+  const j = await asanaApi('/users/me?opt_fields=gid,name,workspaces.gid,workspaces.name');
+  return j?.data || null;
 }
 
-async function obsidianDelete(path) {
-  const url = obsidianVaultUrl(path);
-  const resp = await fetch(url, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${getSyncApiKey()}` },
-  });
-  return resp;
+async function asanaListProjects(workspaceGid) {
+  const j = await asanaApi(`/projects?workspace=${encodeURIComponent(workspaceGid)}&archived=false&opt_fields=gid,name,privacy_setting,owner.gid&limit=100`);
+  return j?.data || [];
 }
 
-async function obsidianList() {
-  const url = obsidianVaultUrl(OBSIDIAN_FOLDER + '/');
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'application/json' },
-  });
-  if (resp.status === 404) return [];
-  if (!resp.ok) throw new Error(`List folder: ${resp.status}`);
-  const data = await resp.json();
-  return data.files || [];
+async function asanaCreatePrivateProject(workspaceGid, name) {
+  const body = JSON.stringify({ data: { name, workspace: workspaceGid, privacy_setting: 'private_to_me' } });
+  const j = await asanaApi('/projects', { method: 'POST', body });
+  return j?.data || null;
+}
+
+async function asanaListTasks(projectGid) {
+  const fields = 'gid,name,notes,html_notes,completed,modified_at';
+  const j = await asanaApi(`/projects/${encodeURIComponent(projectGid)}/tasks?completed_since=now&opt_fields=${fields}&limit=100`);
+  return j?.data || [];
+}
+
+async function asanaGetTask(taskGid) {
+  const fields = 'gid,name,notes,html_notes,completed,modified_at';
+  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}?opt_fields=${fields}`);
+  return j?.data || null;
+}
+
+async function asanaCreateTask(projectGid, workspaceGid, name, htmlNotes) {
+  const body = JSON.stringify({ data: { name, html_notes: htmlNotes, workspace: workspaceGid, projects: [projectGid] } });
+  const j = await asanaApi('/tasks', { method: 'POST', body });
+  return j?.data || null;
+}
+
+async function asanaUpdateTask(taskGid, fields) {
+  const body = JSON.stringify({ data: fields });
+  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}`, { method: 'PUT', body });
+  return j?.data || null;
+}
+
+async function asanaCompleteTask(taskGid) {
+  return asanaUpdateTask(taskGid, { completed: true });
+}
+
+// ─── Markdown ↔ Asana HTML subset ─────────────────
+// Asana's html_notes supports: <body>, <h1>, <h2>, <ol>, <ul>, <li>, <em>, <strong>,
+// <u>, <s>, <code>, <pre>, <a>, <hr>. Anything else is rejected.
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderInline(text) {
+  let s = escapeHtml(text);
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => `<a href="${href}">${label}</a>`);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+  return s;
+}
+function markdownToAsanaHtml(md) {
+  const src = (md ?? '').toString();
+  const lines = src.split(/\r?\n/);
+  const out = [];
+  let listType = null; // 'ul' | 'ol'
+  const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { closeList(); continue; }
+    const h = line.match(/^(#{1,2})\s+(.*)$/);
+    if (h) { closeList(); out.push(`<${h[1].length === 1 ? 'h1' : 'h2'}>${renderInline(h[2])}</${h[1].length === 1 ? 'h1' : 'h2'}>`); continue; }
+    const task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
+    if (task) {
+      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+      const mark = task[1].toLowerCase() === 'x' ? '<s>' : '';
+      const endMark = mark ? '</s>' : '';
+      out.push(`<li>${mark}${renderInline(task[2])}${endMark}</li>`);
+      continue;
+    }
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    if (ul) {
+      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+      out.push(`<li>${renderInline(ul[1])}</li>`);
+      continue;
+    }
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
+      out.push(`<li>${renderInline(ol[1])}</li>`);
+      continue;
+    }
+    closeList();
+    out.push(renderInline(line));
+  }
+  closeList();
+  return `<body>${out.join('')}</body>`;
+}
+
+function asanaHtmlToMarkdown(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const walk = (node) => {
+    let md = '';
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { md += child.textContent; continue; }
+      if (child.nodeType !== 1) continue;
+      const tag = child.tagName.toLowerCase();
+      const inner = walk(child);
+      switch (tag) {
+        case 'body': md += inner; break;
+        case 'h1': md += `\n# ${inner}\n`; break;
+        case 'h2': md += `\n## ${inner}\n`; break;
+        case 'strong': case 'b': md += `**${inner}**`; break;
+        case 'em': case 'i': md += `*${inner}*`; break;
+        case 's': case 'strike': case 'del': md += `~~${inner}~~`; break;
+        case 'code': md += `\`${inner}\``; break;
+        case 'a': md += `[${inner}](${child.getAttribute('href') || ''})`; break;
+        case 'ul': md += '\n' + Array.from(child.children).map(li => `- ${walk(li)}`).join('\n') + '\n'; break;
+        case 'ol': md += '\n' + Array.from(child.children).map((li, i) => `${i + 1}. ${walk(li)}`).join('\n') + '\n'; break;
+        case 'li': md += inner; break;
+        case 'br': md += '\n'; break;
+        case 'hr': md += '\n---\n'; break;
+        default: md += inner;
+      }
+    }
+    return md;
+  };
+  return walk(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ─── Sync engine ─────────────────
+async function pushSync() {
+  if (!isSyncConfigured()) return;
+  if (syncInProgress) return;
+  syncInProgress = true;
+  setSyncBar('syncing', 'Pushing to Asana…');
+  try {
+    const project = getAsanaProject();
+    const workspace = getAsanaWorkspace();
+    const notes = Array.isArray(state.notes) ? state.notes : [];
+
+    setSyncBar('syncing', `Pushing ${notes.length} note(s)…`);
+    for (const note of notes) {
+      const htmlNotes = markdownToAsanaHtml(note.content ?? '');
+      const title = (note.title || 'Untitled').slice(0, 200);
+      if (note.asanaTaskGid) {
+        try {
+          const updated = await asanaUpdateTask(note.asanaTaskGid, { name: title, html_notes: htmlNotes });
+          if (updated?.modified_at) setAsanaModified(note.asanaTaskGid, updated.modified_at);
+        } catch (err) {
+          if (/404/.test(err.message)) {
+            const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
+            if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
+          } else { throw err; }
+        }
+      } else {
+        const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
+        if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
+      }
+    }
+
+    saveState({ skipSchedule: true });
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus(`Synced ${t}`);
+    setSyncBar('connected', `Synced to Asana — ${t}`);
+  } catch (err) {
+    setSyncStatus(`Sync error: ${err.message}`);
+    showToast(`⚠ ${err.message}`);
+    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+async function pullSync() {
+  if (!isSyncConfigured()) return;
+  try {
+    setSyncStatus('Pulling from Asana…');
+    setSyncBar('syncing', 'Pulling from Asana…');
+
+    const project = getAsanaProject();
+    const tasks = await asanaListTasks(project.gid);
+
+    const localNotes = (state.notes || []).map(n => ({ ...n }));
+    const localByGid = new Map(localNotes.filter(n => n.asanaTaskGid).map(n => [n.asanaTaskGid, n]));
+    const localActiveNoteId = state.activeNoteId;
+    const mergedNotes = [];
+    const processedLocalIds = new Set();
+
+    for (const task of tasks) {
+      if (task.completed) continue; // completed tasks = deleted notes
+      const matched = localByGid.get(task.gid);
+      const remoteMd = task.html_notes ? asanaHtmlToMarkdown(task.html_notes) : (task.notes || '');
+      if (matched) {
+        matched.title = task.name || matched.title;
+        matched.content = remoteMd;
+        matched.asanaTaskGid = task.gid;
+        setAsanaModified(task.gid, task.modified_at);
+        mergedNotes.push(matched);
+        processedLocalIds.add(matched.id);
+      } else {
+        const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        mergedNotes.push({ id, title: task.name || 'Untitled', content: remoteMd, asanaTaskGid: task.gid });
+        setAsanaModified(task.gid, task.modified_at);
+      }
+    }
+
+    // Keep local-only notes that were never pushed
+    for (const note of localNotes) {
+      if (!processedLocalIds.has(note.id) && !note.asanaTaskGid) mergedNotes.push(note);
+    }
+
+    state.notes = mergedNotes.length ? mergedNotes : [{ id: 'note-1', title: 'Note 1', content: '' }];
+    if (state.notes.find(n => n.id === localActiveNoteId)) state.activeNoteId = localActiveNoteId;
+    else state.activeNoteId = state.notes[0].id;
+
+    saveState();
+    loadNotes();
+
+    // Push back so any local-only notes become tasks
+    await pushSync();
+
+    lastPullTime = Date.now();
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus(`Synced ${t}`);
+    setSyncBar('connected', `Synced with Asana — ${t}`);
+  } catch (err) {
+    setSyncStatus(`Sync error: ${err.message}`);
+    showToast(`⚠ ${err.message}`);
+    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
+  }
+}
+
+async function handleNoteDeletion(asanaTaskGid) {
+  if (!asanaTaskGid || !isSyncConfigured()) return;
+  try { await asanaCompleteTask(asanaTaskGid); } catch {}
 }
 
 function buildQuickLinksMarkdown() {
@@ -3154,232 +3343,6 @@ function buildSavedLinksMarkdown() {
   return md.trimEnd() + '\n';
 }
 
-function buildSyncPayload() {
-  const stateForSync = { ...state };
-  stateForSync.notes = (state.notes || []).map(n => ({ id: n.id, title: n.title, vaultPath: noteVaultPath(n) }));
-  if (Array.isArray(state.wallpapers)) {
-    stateForSync.wallpapers = state.wallpapers.map(w => ({ id: w.id, label: w.label, emoji: w.emoji }));
-  }
-  return JSON.stringify({ v: 2, ts: Date.now(), state: stateForSync, saved: savedData }, null, 2);
-}
-
-async function applySyncPayload(json, options) {
-  const skipNoteContent = options?.skipNoteContent === true;
-  const skipSave = options?.skipSave === true;
-  let data;
-  try { data = JSON.parse(json); } catch { return; }
-  if (!data || (data.v !== 2 && data.v !== 1)) return;
-
-  if (data.state) {
-    const localWallpapers = state.wallpapers;
-    Object.assign(state, data.state);
-    if (!Array.isArray(state.addressBook)) state.addressBook = [];
-    if (Array.isArray(state.wallpapers) && Array.isArray(localWallpapers)) {
-      const byId = new Map(localWallpapers.map(w => [w.id, w]));
-      state.wallpapers = state.wallpapers.map(w => {
-        const local = byId.get(w.id);
-        return local && (local.url || local.thumb)
-          ? { ...w, url: local.url, thumb: local.thumb }
-          : { ...w, url: w.url || '', thumb: w.thumb || '' };
-      });
-    }
-    if (!skipNoteContent && Array.isArray(state.notes)) {
-      state.notes = state.notes.map(n => ({ ...n, content: n.content ?? '' }));
-    }
-    if (!Array.isArray(state.notes) || !state.notes.length) {
-      state.notes = [{ id: 'note-1', title: 'Note 1', content: '' }];
-      state.activeNoteId = 'note-1';
-    }
-    if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
-      state.activeNoteId = state.notes[0].id;
-    }
-    renderLinks();
-    syncSettings();
-    applyVisibility();
-    applyPanelTheme(state.panelTheme || 'dark');
-    applyEngine(state.searchEngine || 'claude');
-    if (!skipSave) { saveState(); loadNotes(); }
-  }
-  if (data.saved) {
-    savedData = data.saved;
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      try { await chrome.storage.local.set({ lumina_saved: savedData }); } catch {}
-    } else {
-      localStorage.setItem('lumina_saved', JSON.stringify(savedData));
-    }
-    renderSavedFilters();
-    renderSavedList();
-  }
-}
-
-async function pushSync() {
-  if (!isSyncConfigured()) return;
-  if (syncInProgress) return;
-  syncInProgress = true;
-  setObsidianStatus('syncing', 'Pushing to Obsidian…');
-  try {
-    const notes = Array.isArray(state.notes) ? state.notes : [];
-
-    // 1. Push each note as a .md file in the Lumina folder
-    setObsidianStatus('syncing', `Pushing ${notes.length} note(s)…`);
-    for (const note of notes) {
-      const newPath = noteVaultPath(note);
-      const oldPath = note.vaultPath;
-      if (oldPath && oldPath !== newPath) {
-        await obsidianDelete(oldPath).catch(() => {});
-      }
-      const content = (note.content ?? '').toString() || ' ';
-      await obsidianPut(newPath, content);
-      note.vaultPath = newPath;
-    }
-
-    // 2. Push quick links and saved links as markdown
-    setObsidianStatus('syncing', 'Pushing links…');
-    await obsidianPut(`${OBSIDIAN_FOLDER}/Quick Links.md`, buildQuickLinksMarkdown());
-    await obsidianPut(`${OBSIDIAN_FOLDER}/Saved Links.md`, buildSavedLinksMarkdown());
-
-    // 3. Push settings/state file
-    setObsidianStatus('syncing', 'Pushing settings…');
-    await obsidianPut(OBSIDIAN_SETTINGS_FILE, buildSyncPayload(), 'application/json');
-
-    // Save sync snapshots so we can detect which side changed later
-    for (const note of notes) {
-      updateSyncSnapshot(note.id, (note.content ?? '').toString());
-    }
-
-    saveState({ skipSchedule: true });
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus(`Synced ${t}`);
-    setObsidianStatus('connected', `Synced to Obsidian — ${t}`);
-  } catch (err) {
-    setSyncStatus(`Sync error: ${err.message}`);
-    showToast(`⚠ ${err.message}`);
-    setObsidianStatus('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
-  } finally {
-    syncInProgress = false;
-  }
-}
-
-async function pullSync() {
-  if (!isSyncConfigured()) return;
-  try {
-    setSyncStatus('Pulling from vault…');
-    setObsidianStatus('syncing', 'Pulling from Obsidian…');
-
-    // 1. List all .md files in the Lumina folder
-    let vaultFiles;
-    try { vaultFiles = await obsidianList(); } catch (err) {
-      // Folder doesn't exist yet — do a first push
-      if (err.message.includes('404')) { await pushSync(); return; }
-      throw err;
-    }
-
-    // Exclude system files (Quick Links.md, Saved Links.md) from note import
-    const SYSTEM_FILES = new Set([`${OBSIDIAN_FOLDER}/Quick Links.md`, `${OBSIDIAN_FOLDER}/Saved Links.md`]);
-    const mdFiles = vaultFiles
-      .filter(f => f.endsWith('.md') && !f.endsWith('/.md'))
-      .map(f => f.startsWith(OBSIDIAN_FOLDER + '/') ? f : `${OBSIDIAN_FOLDER}/${f}`)
-      .filter(f => !SYSTEM_FILES.has(f));
-
-    // 2. Fetch settings file if it exists (for non-note state: links, wallpapers, etc.)
-    let settingsJson = null;
-    const settingsResp = await obsidianGet(OBSIDIAN_SETTINGS_FILE);
-    if (settingsResp.ok) {
-      settingsJson = await settingsResp.text();
-      await applySyncPayload(settingsJson, { skipNoteContent: true, skipSave: true });
-    } else if (settingsResp.status !== 404) {
-      throw new Error(`Pull settings: ${settingsResp.status}`);
-    }
-
-    // 3. Build maps of what we know locally
-    const localNotes = (state.notes || []).map(n => ({ ...n }));
-    const localByPath = new Map(localNotes.filter(n => n.vaultPath).map(n => [n.vaultPath, n]));
-    const localById = new Map(localNotes.map(n => [n.id, n]));
-    const localActiveNoteId = state.activeNoteId;
-
-    // Parse remote note metadata for id ↔ path mapping
-    let remoteNotesMeta = [];
-    if (settingsJson) {
-      try { remoteNotesMeta = JSON.parse(settingsJson)?.state?.notes || []; } catch {}
-    }
-    const remoteMetaByPath = new Map(remoteNotesMeta.filter(n => n.vaultPath).map(n => [n.vaultPath, n]));
-
-    // 4. Merge: vault files are source of truth
-    const mergedNotes = [];
-    const processedLocalIds = new Set();
-
-    for (const filePath of mdFiles) {
-      // Fetch content from vault
-      let content = '';
-      try {
-        const r = await obsidianGet(filePath);
-        if (r.ok) content = await r.text();
-      } catch {}
-
-      // Try to match to an existing local note by vaultPath
-      const localNote = localByPath.get(filePath);
-      // Or match via remote metadata (id mapping)
-      const remoteMeta = remoteMetaByPath.get(filePath);
-      const metaNote = remoteMeta ? localById.get(remoteMeta.id) : null;
-      const matched = localNote || metaNote;
-
-      if (matched) {
-        // Existing note — update content from vault
-        matched.content = content;
-        matched.vaultPath = filePath;
-        if (remoteMeta) {
-          matched.id = remoteMeta.id;
-          matched.title = remoteMeta.title || matched.title;
-        }
-        mergedNotes.push(matched);
-        processedLocalIds.add(matched.id);
-      } else {
-        // New file created in Obsidian — import it
-        const filename = filePath.split('/').pop().replace(/\.md$/, '');
-        const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-        mergedNotes.push({
-          id,
-          title: filename,
-          content,
-          vaultPath: filePath,
-        });
-      }
-    }
-
-    // 5. Keep local-only notes that aren't in the vault yet (never pushed)
-    for (const note of localNotes) {
-      if (!processedLocalIds.has(note.id) && !note.vaultPath) {
-        mergedNotes.push(note);
-      }
-      // Notes with a vaultPath that no longer exists in vault = deleted in Obsidian → drop them
-    }
-
-    state.notes = mergedNotes.length ? mergedNotes : [{ id: 'note-1', title: 'Note 1', content: '' }];
-
-    // Restore active note if still valid
-    if (state.notes.find(n => n.id === localActiveNoteId)) {
-      state.activeNoteId = localActiveNoteId;
-    } else {
-      state.activeNoteId = state.notes[0].id;
-    }
-
-    saveState();
-    loadNotes();
-
-    // 6. Push back so settings file reflects any new imports
-    await pushSync();
-
-    lastPullTime = Date.now();
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus(`Synced ${t}`);
-    setObsidianStatus('connected', `Synced with Obsidian — ${t}`);
-  } catch (err) {
-    setSyncStatus(`Sync error: ${err.message}`);
-    showToast(`⚠ ${err.message}`);
-    setObsidianStatus('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
-  }
-}
-
 function schedulePush() {
   if (!isSyncConfigured()) return;
   clearTimeout(syncDebounceTimer);
@@ -3393,174 +3356,166 @@ function flushSyncNow() {
   pushSync();
 }
 
+function downloadTextFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function replaceOptions(select, items, currentGid) {
+  while (select.firstChild) select.removeChild(select.firstChild);
+  for (const item of items) {
+    const opt = document.createElement('option');
+    opt.value = item.value;
+    opt.textContent = item.label;
+    if (item.value === currentGid) opt.selected = true;
+    select.appendChild(opt);
+  }
+}
+
+async function populateWorkspaceSelect(select) {
+  const pat = getAsanaPat();
+  if (!pat) return;
+  try {
+    const me = await asanaMe();
+    const current = getAsanaWorkspace()?.gid || '';
+    const items = (me?.workspaces || []).map(w => ({ value: w.gid, label: w.name }));
+    replaceOptions(select, items, current);
+  } catch {
+    replaceOptions(select, [{ value: '', label: '(token invalid)' }], '');
+  }
+}
+
+async function ensureAsanaProject() {
+  const project = getAsanaProject();
+  const workspace = getAsanaWorkspace();
+  if (!workspace?.gid) throw new Error('Pick a workspace first');
+  if (project?.gid) {
+    try {
+      const fresh = await asanaApi(`/projects/${project.gid}?opt_fields=gid,name,privacy_setting`);
+      if (fresh?.data?.gid) return fresh.data;
+    } catch {
+      // project gone / inaccessible — fall through and recreate
+    }
+  }
+  const created = await asanaCreatePrivateProject(workspace.gid, ASANA_PROJECT_NAME);
+  if (created?.gid) { setAsanaProject({ gid: created.gid, name: created.name }); return created; }
+  throw new Error('Could not create Lumina Notes project');
+}
+
 function initSync() {
-  const urlInput = document.getElementById('sync-api-url');
-  const keyInput = document.getElementById('sync-api-key');
-  urlInput.value = getSyncApiUrl();
-  keyInput.value = getSyncApiKey();
-  urlInput.addEventListener('change', () => {
-    localStorage.setItem('lumina_sync_api_url', urlInput.value.trim());
-    setSyncStatus(isSyncConfigured() ? 'Settings saved — click Sync' : '');
-    checkObsidianConnection();
+  const patInput = document.getElementById('asana-pat');
+  const workspaceSelect = document.getElementById('asana-workspace-select');
+  const connectBtn = document.getElementById('asana-connect-btn');
+  const disconnectBtn = document.getElementById('asana-disconnect-btn');
+  const projectName = document.getElementById('asana-project-name');
+  const exportLinksBtn = document.getElementById('asana-export-links-btn');
+  const exportSettingsBtn = document.getElementById('asana-export-settings-btn');
+
+  if (!patInput) return;
+
+  patInput.value = getAsanaPat();
+  const proj = getAsanaProject();
+  if (projectName) projectName.textContent = proj?.name || '(not connected)';
+  if (getAsanaWorkspace()?.gid && workspaceSelect) populateWorkspaceSelect(workspaceSelect);
+
+  patInput.addEventListener('change', async () => {
+    setAsanaPat(patInput.value);
+    if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
+    checkAsanaConnection();
   });
-  keyInput.addEventListener('change', () => {
-    localStorage.setItem('lumina_sync_api_key', keyInput.value.trim());
-    setSyncStatus(isSyncConfigured() ? 'Settings saved — click Sync' : '');
-    checkObsidianConnection();
+
+  workspaceSelect?.addEventListener('change', () => {
+    const opt = workspaceSelect.selectedOptions[0];
+    if (opt?.value) setAsanaWorkspace({ gid: opt.value, name: opt.textContent });
+    setAsanaProject(null);
+    if (projectName) projectName.textContent = '(not connected)';
+    checkAsanaConnection();
+  });
+
+  connectBtn?.addEventListener('click', async () => {
+    try {
+      setSyncBar('syncing', 'Connecting to Asana…');
+      if (!getAsanaPat()) throw new Error('Enter a Personal Access Token');
+      const me = await asanaMe();
+      const workspaces = me?.workspaces || [];
+      if (!workspaces.length) throw new Error('No workspaces on this account');
+      let selected = getAsanaWorkspace();
+      if (!selected?.gid) {
+        const first = workspaces[0];
+        selected = { gid: first.gid, name: first.name };
+        setAsanaWorkspace(selected);
+      }
+      if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
+      const project = await ensureAsanaProject();
+      if (projectName) projectName.textContent = project.name;
+      setSyncBar('connected', `Connected — ${project.name}`);
+      setSyncStatus('Ready — click Sync to pull');
+    } catch (err) {
+      setSyncBar('disconnected', err.message);
+      showToast(`⚠ ${err.message}`);
+    }
+  });
+
+  disconnectBtn?.addEventListener('click', () => {
+    setAsanaPat('');
+    setAsanaWorkspace(null);
+    setAsanaProject(null);
+    patInput.value = '';
+    if (workspaceSelect) replaceOptions(workspaceSelect, [], '');
+    if (projectName) projectName.textContent = '(not connected)';
+    setSyncBar('disconnected', 'Disconnected from Asana');
+    setSyncStatus('');
   });
 
   document.getElementById('sync-now-btn').addEventListener('click', () => {
-    if (!isSyncConfigured()) { setSyncStatus('Enter API URL and key first'); return; }
+    if (!isSyncConfigured()) { setSyncStatus('Connect to Asana first'); return; }
     clearTimeout(syncDebounceTimer);
     syncDebounceTimer = null;
     pullSync();
   });
+
+  exportLinksBtn?.addEventListener('click', () => {
+    downloadTextFile('lumina-links.md', buildQuickLinksMarkdown() + '\n---\n\n' + buildSavedLinksMarkdown(), 'text/markdown');
+  });
+  exportSettingsBtn?.addEventListener('click', () => {
+    const payload = { exportedAt: new Date().toISOString(), state, saved: savedData };
+    downloadTextFile('lumina-settings.json', JSON.stringify(payload, null, 2), 'application/json');
+  });
+
   if (isSyncConfigured()) setSyncStatus('Ready — click Sync to pull');
-  // Pull any edits made in Obsidian while Lumina was in the background, so
-  // the next push (Cmd+S, tab close, scheduled) doesn't clobber them. We
-  // listen on both visibilitychange (tab switches, minimize) and window
-  // focus/blur (app switches via Cmd+Tab, where the tab stays "visible" but
-  // the window loses focus) — they're complementary on macOS.
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSyncNow();
-    else if (document.visibilityState === 'visible') checkVaultChanges();
+    else if (document.visibilityState === 'visible' && isSyncConfigured() && Date.now() - lastPullTime > 30_000) pullSync();
   });
   window.addEventListener('blur', () => { flushSyncNow(); });
-  window.addEventListener('focus', () => { checkVaultChanges(); });
   window.addEventListener('pagehide', () => { flushSyncNow(); });
-  checkObsidianConnection();
-  // Check for vault changes on load and every hour
-  checkVaultChanges();
-  if (vaultCheckInterval) clearInterval(vaultCheckInterval);
-  vaultCheckInterval = setInterval(checkVaultChanges, 60 * 60 * 1000);
+  checkAsanaConnection();
 }
 
-async function checkVaultChanges() {
-  if (!isSyncConfigured()) return;
-  if (vaultCheckInProgress || syncInProgress) return;
-  vaultCheckInProgress = true;
-  try {
-    const notes = state.notes || [];
-    if (!notes.length) return;
-    const snapshots = getSyncSnapshots();
-    const autoMerged = [];
-    const conflicts = [];
-
-    for (const note of notes) {
-      const path = note.vaultPath || noteVaultPath(note);
-      let vaultContent;
-      try {
-        const r = await obsidianGet(path);
-        if (!r.ok) continue;
-        vaultContent = (await r.text()).trim();
-      } catch { continue; }
-
-      const localContent = (note.content ?? '').toString().trim();
-      const snapshotContent = (snapshots[note.id] ?? '').trim();
-
-      // No difference — skip
-      if (vaultContent === localContent) continue;
-
-      const vaultChanged = vaultContent !== snapshotContent;
-      const localChanged = localContent !== snapshotContent;
-
-      if (vaultChanged && !localChanged) {
-        // Only vault changed — safe to auto-merge into local
-        note.content = vaultContent;
-        updateSyncSnapshot(note.id, vaultContent);
-        autoMerged.push(note.title);
-      } else if (!vaultChanged && localChanged) {
-        // Only local changed — will push on next sync, nothing to do
-      } else if (vaultChanged && localChanged) {
-        // Both sides changed — conflict
-        conflicts.push({ note, vaultContent });
-      }
-    }
-
-    if (autoMerged.length) {
-      saveState({ skipSchedule: true });
-      loadNotes();
-      const names = autoMerged.length <= 3 ? autoMerged.join(', ') : `${autoMerged.length} notes`;
-      setObsidianStatus('connected', `Auto-merged: ${names}`);
-    }
-
-    if (conflicts.length) {
-      showConflictBanner(conflicts);
-    }
-  } catch {} finally {
-    vaultCheckInProgress = false;
-  }
-}
-
-function showConflictBanner(conflicts) {
-  let banner = document.getElementById('vault-update-banner');
-  if (banner) banner.remove();
-  banner = document.createElement('div');
-  banner.id = 'vault-update-banner';
-
-  const label = conflicts.length === 1
-    ? `"${conflicts[0].note.title}" changed in both Obsidian and Lumina`
-    : `${conflicts.length} notes changed in both Obsidian and Lumina`;
-
-  banner.innerHTML = `
-    <span>${label}</span>
-    <div style="display:flex;gap:6px;margin-top:8px;justify-content:center;">
-      <button id="vault-update-obsidian">Use Obsidian</button>
-      <button id="vault-update-local">Use Local</button>
-      <button id="vault-update-dismiss">Dismiss</button>
-    </div>
-  `;
-  document.body.appendChild(banner);
-  requestAnimationFrame(() => banner.classList.add('show'));
-
-  const dismiss = () => {
-    banner.classList.remove('show');
-    setTimeout(() => banner.remove(), 300);
-  };
-
-  document.getElementById('vault-update-obsidian').addEventListener('click', () => {
-    for (const { note, vaultContent } of conflicts) {
-      note.content = vaultContent;
-      updateSyncSnapshot(note.id, vaultContent);
-    }
-    saveState({ skipSchedule: true });
-    loadNotes();
-    // Push so vault gets the resolved state
-    schedulePush();
-    setObsidianStatus('connected', `Resolved ${conflicts.length} conflict(s) — used Obsidian`);
-    dismiss();
-  });
-
-  document.getElementById('vault-update-local').addEventListener('click', () => {
-    for (const { note } of conflicts) {
-      updateSyncSnapshot(note.id, (note.content ?? '').toString());
-    }
-    // Push local content to vault
-    schedulePush();
-    setObsidianStatus('connected', `Resolved ${conflicts.length} conflict(s) — used local`);
-    dismiss();
-  });
-
-  document.getElementById('vault-update-dismiss').addEventListener('click', dismiss);
-}
-
-async function checkObsidianConnection() {
-  if (!isSyncConfigured()) {
-    setObsidianStatus('disconnected', 'Obsidian sync not configured — add API URL and key in Settings');
+async function checkAsanaConnection() {
+  if (!getAsanaPat()) {
+    setSyncBar('disconnected', 'Asana sync not configured — add your Personal Access Token');
     return;
   }
   try {
-    // Use an authenticated endpoint to truly validate the key
-    const resp = await fetch(`${getSyncApiUrl()}/vault/`, {
-      headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'application/json' },
-    });
-    if (resp.ok) {
-      setObsidianStatus('connected', 'Connected to Obsidian');
-    } else {
-      setObsidianStatus('disconnected', `Cannot reach Obsidian — ${resp.status} error`);
+    const me = await asanaMe();
+    if (!me?.gid) throw new Error('Token rejected');
+    if (!getAsanaWorkspace()?.gid) {
+      setSyncBar('disconnected', 'Pick a workspace to finish connecting');
+      return;
     }
-  } catch {
-    setObsidianStatus('disconnected', 'Cannot reach Obsidian — make sure it is open with Local REST API');
+    if (!getAsanaProject()?.gid) {
+      setSyncBar('disconnected', 'Click Connect to create the Lumina Notes project');
+      return;
+    }
+    setSyncBar('connected', `Connected as ${me.name}`);
+  } catch (err) {
+    setSyncBar('disconnected', `Cannot reach Asana — ${err.message.slice(0, 60)}`);
   }
 }
 
@@ -3598,48 +3553,37 @@ function initSetupWizard() {
   const freshBtn = document.getElementById('setup-fresh-btn');
   const doneBtn = document.getElementById('setup-done-btn');
 
-  if (!connectBtn) return; // no setup overlay in DOM
+  if (!connectBtn) return;
 
   connectBtn.addEventListener('click', () => goToSetupStep('configure'));
   skipBtn.addEventListener('click', () => hideSetupOverlay());
   backBtn.addEventListener('click', () => goToSetupStep('welcome'));
 
   testBtn.addEventListener('click', async () => {
-    const urlInput = document.getElementById('setup-api-url');
-    const keyInput = document.getElementById('setup-api-key');
+    const patInput = document.getElementById('setup-asana-pat');
     const statusEl = document.getElementById('setup-test-status');
-    const url = (urlInput.value || '').trim().replace(/\/+$/, '');
-    const key = (keyInput.value || '').trim();
-    if (!url || !key) {
-      statusEl.textContent = 'Please enter both URL and API key';
+    const pat = (patInput?.value || '').trim();
+    if (!pat) {
+      statusEl.textContent = 'Please paste a Personal Access Token';
       statusEl.className = 'setup-test-status error';
       return;
     }
-    statusEl.textContent = 'Testing connection…';
+    statusEl.textContent = 'Connecting to Asana…';
     statusEl.className = 'setup-test-status testing';
     try {
-      const resp = await fetch(url + '/', {
-        headers: { Authorization: 'Bearer ' + key },
-        mode: 'cors',
-      });
-      if (resp.ok) {
-        // Save credentials
-        localStorage.setItem('lumina_sync_api_url', url);
-        localStorage.setItem('lumina_sync_api_key', key);
-        // Update settings inputs too
-        const settingsUrl = document.getElementById('sync-api-url');
-        const settingsKey = document.getElementById('sync-api-key');
-        if (settingsUrl) settingsUrl.value = url;
-        if (settingsKey) settingsKey.value = key;
-        statusEl.textContent = 'Connected!';
-        statusEl.className = 'setup-test-status success';
-        setTimeout(() => goToSetupStep('import'), 600);
-      } else {
-        statusEl.textContent = `Connection failed — HTTP ${resp.status}`;
-        statusEl.className = 'setup-test-status error';
-      }
-    } catch {
-      statusEl.textContent = 'Cannot reach Obsidian — check URL and that Obsidian is open';
+      setAsanaPat(pat);
+      const me = await asanaMe();
+      if (!me?.workspaces?.length) throw new Error('No workspaces on this account');
+      const first = me.workspaces[0];
+      setAsanaWorkspace({ gid: first.gid, name: first.name });
+      const project = await ensureAsanaProject();
+      const settingsPat = document.getElementById('asana-pat');
+      if (settingsPat) settingsPat.value = pat;
+      statusEl.textContent = `Connected — project "${project.name}" ready`;
+      statusEl.className = 'setup-test-status success';
+      setTimeout(() => goToSetupStep('import'), 600);
+    } catch (err) {
+      statusEl.textContent = `Connection failed — ${err.message.slice(0, 80)}`;
       statusEl.className = 'setup-test-status error';
     }
   });
@@ -3647,17 +3591,17 @@ function initSetupWizard() {
   importBtn.addEventListener('click', async () => {
     const desc = document.getElementById('setup-done-desc');
     try {
-      await pullSync();
-      if (desc) desc.textContent = 'Your notes and settings have been imported from Obsidian. Enjoy your new tab!';
+      await pushSync();
+      if (desc) desc.textContent = 'Your existing notes have been pushed to Asana as tasks. Enjoy your new tab!';
     } catch {
-      if (desc) desc.textContent = 'Import had some issues, but Lumina is ready. You can sync again from Settings.';
+      if (desc) desc.textContent = 'Push had some issues, but Lumina is ready. You can sync again from Settings.';
     }
     goToSetupStep('done');
   });
 
   freshBtn.addEventListener('click', () => {
     const desc = document.getElementById('setup-done-desc');
-    if (desc) desc.textContent = 'Lumina is connected to Obsidian and ready to sync. Enjoy your new tab!';
+    if (desc) desc.textContent = 'Lumina is connected to Asana and ready to sync. Enjoy your new tab!';
     goToSetupStep('done');
   });
 

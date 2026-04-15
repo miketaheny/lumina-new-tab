@@ -2094,58 +2094,6 @@
       transform: translateX(-50%) translateY(0);
     }
 
-    #vault-update-banner {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-20px);
-      background: rgba(20, 16, 40, 0.96);
-      border: 1px solid rgba(139, 92, 246, 0.3);
-      backdrop-filter: blur(20px);
-      color: rgba(255, 255, 255, 0.85);
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-size: 13px;
-      font-family: 'Inter', sans-serif;
-      z-index: 10000;
-      opacity: 0;
-      transition: opacity 0.3s, transform 0.3s;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-      max-width: 420px;
-      text-align: center;
-      line-height: 1.5;
-    }
-    #vault-update-banner.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-    #vault-update-banner button {
-      padding: 6px 14px;
-      border-radius: 8px;
-      border: 1px solid var(--glass-border);
-      font-size: 12px;
-      font-family: 'Inter', sans-serif;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    #vault-update-obsidian {
-      background: rgba(139, 92, 246, 0.25);
-      border-color: rgba(139, 92, 246, 0.4);
-      color: #c4b5fd;
-    }
-    #vault-update-obsidian:hover { background: rgba(139, 92, 246, 0.4); }
-    #vault-update-local {
-      background: rgba(74, 222, 128, 0.15);
-      border-color: rgba(74, 222, 128, 0.3);
-      color: #4ade80;
-    }
-    #vault-update-local:hover { background: rgba(74, 222, 128, 0.25); }
-    #vault-update-dismiss {
-      background: var(--glass);
-      color: var(--text-muted);
-    }
-    #vault-update-dismiss:hover { background: var(--glass-hover); }
-
     /* ─── SETUP / WELCOME OVERLAY ─── */
     #setup-overlay {
       position: fixed;
@@ -2378,7 +2326,7 @@
       transform: translateX(0);
     }
 
-    #obsidian-status-bar {
+    #sync-status-bar {
       display: flex;
       align-items: center;
       gap: 7px;
@@ -2390,7 +2338,7 @@
       flex-shrink: 0;
       transition: opacity 0.2s;
     }
-    #obsidian-status-dot {
+    #sync-status-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
@@ -2398,9 +2346,9 @@
       background: rgba(251,191,36,0.7);
       transition: background 0.3s;
     }
-    #obsidian-status-bar.connected #obsidian-status-dot { background: rgba(74,222,128,0.85); }
-    #obsidian-status-bar.disconnected #obsidian-status-dot { background: rgba(251,80,80,0.75); }
-    #obsidian-status-bar.syncing #obsidian-status-dot { background: rgba(96,165,250,0.8); animation: pulse-dot 1s infinite; }
+    #sync-status-bar.connected #sync-status-dot { background: rgba(74,222,128,0.85); }
+    #sync-status-bar.disconnected #sync-status-dot { background: rgba(251,80,80,0.75); }
+    #sync-status-bar.syncing #sync-status-dot { background: rgba(96,165,250,0.8); animation: pulse-dot 1s infinite; }
     @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
     @media (max-width: 768px) {
@@ -3495,32 +3443,29 @@
     <div class="help-section">
       <div class="help-section-title">Auto-fill forms</div>
       <p class="help-p">Add entries in Settings → Auto-fill forms. Then right-click on any page and choose
-        <strong>Auto-fill form with</strong> → an entry to fill inputs (name, email, phone, address, etc.). Entries sync
-        with your vault.
+        <strong>Auto-fill form with</strong> → an entry to fill inputs (name, email, phone, address, etc.).
       </p>
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Sync via Obsidian (Local REST API)</div>
-      <p class="help-p">Notes sync as .md files in your Obsidian vault's Lumina/ folder via the Local REST API plugin.
-        Settings → Sync.</p>
-      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Install the
-          <strong>Local REST API</strong> plugin in Obsidian → copy the API key → paste URL and key into Settings → Sync</span></div>
-      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates a Lumina/
-          folder in your vault with each note as a .md file and a .lumina-sync.json settings file</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after any
-          change (links, settings, and each note as its own .md file). Also flushes immediately when you switch tabs,
-          switch apps, or close the window.</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">When you return to
-          the Lumina tab or refocus the Chrome window, vault edits are pulled in automatically so notes you changed in
-          Obsidian don't get overwritten.</span></div>
-      <div class="help-row"><span class="help-row-label">Conflicts</span><span class="help-row-desc">If a note changed
-          in both places since the last sync, a banner lets you choose which version to keep.</span></div>
-      <div class="help-row"><span class="help-row-label">Manual</span><span class="help-row-desc">Sync Now button in
-          Settings does a full pull, including imports for new files and deletions for files removed from the
-          vault.</span></div>
-      <div class="help-row"><span class="help-row-label">Not configured</span><span class="help-row-desc">Extension works
-          normally without sync — nothing changes</span></div>
+      <div class="help-section-title">Sync via Asana (private project)</div>
+      <p class="help-p">Notes sync to Asana as tasks inside a private "Lumina Notes" project (private to you, invisible
+        to your organization). Settings → Sync.</p>
+      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Asana → Profile → My
+          Settings → Apps → Manage Developer Apps → create a Personal Access Token → paste it into Settings →
+          Sync → Connect</span></div>
+      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates a
+          "Lumina Notes" private project in your workspace and pushes any existing local notes as tasks</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after
+          any edit. Also flushes immediately when you switch tabs, switch apps, or close the window.</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">When the tab
+          becomes visible again, edits you made to tasks in Asana are pulled back in.</span></div>
+      <div class="help-row"><span class="help-row-label">Deletes</span><span class="help-row-desc">Deleting a note
+          locally marks the corresponding Asana task complete (reversible from Asana).</span></div>
+      <div class="help-row"><span class="help-row-label">Exports</span><span class="help-row-desc">Download quick
+          links + saved links as markdown, or settings as JSON, from Settings → Sync.</span></div>
+      <div class="help-row"><span class="help-row-label">Not configured</span><span class="help-row-desc">Extension
+          works normally without sync — nothing changes</span></div>
     </div>
 
     <div class="help-section">
@@ -3697,7 +3642,7 @@
           <div class="settings-section-title">Auto-fill forms</div>
           <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;">Right-click on any page
             → <strong>Auto-fill form with</strong> → choose an entry. Add address book entries below; they sync with
-            your vault.</p>
+            your Asana project.</p>
           <div id="address-book-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
           <button id="address-book-add-btn" type="button"
             style="width:100%;padding:8px 12px;border-radius:8px;border:1px dashed var(--glass-border);background:rgba(167,139,250,0.08);color:var(--accent);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">+
@@ -3834,16 +3779,26 @@
         </div>
 
         <div class="settings-section" style="margin-bottom:0">
-          <div class="settings-section-title">Sync via Obsidian (Local REST API)</div>
+          <div class="settings-section-title">Sync via Asana (private project)</div>
           <div class="field" style="margin-bottom:10px">
-            <label>REST API URL</label>
-            <input id="sync-api-url" type="text" placeholder="https://127.0.0.1:27124" maxlength="200"
+            <label>Personal Access Token</label>
+            <input id="asana-pat" type="password" placeholder="Paste your Asana PAT" maxlength="200"
               style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
           </div>
           <div class="field" style="margin-bottom:10px">
-            <label>API Key</label>
-            <input id="sync-api-key" type="password" placeholder="Enter your Local REST API key" maxlength="200"
-              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
+            <label>Workspace</label>
+            <select id="asana-workspace-select"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;"></select>
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Project</label>
+            <div style="font-size:13px;color:var(--text-muted);padding:8px 0;"><span id="asana-project-name">(not connected)</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button id="asana-connect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Connect</button>
+            <button id="asana-disconnect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Disconnect</button>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <button id="sync-now-btn"
@@ -3853,7 +3808,13 @@
               style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
           </div>
           <div style="margin-top:8px;">
-            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Notes sync as .md files in your vault's Lumina/ folder. Install the Local REST API plugin in Obsidian first.</span>
+            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Notes sync as tasks in a private "Lumina Notes" project (private to you). Deleted notes are marked complete in Asana.</span>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button id="asana-export-links-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export links (.md)</button>
+            <button id="asana-export-settings-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export settings (.json)</button>
           </div>
         </div>
 
@@ -3966,9 +3927,9 @@
       </div>
       <div id="notes-editor"></div>
       <textarea id="notes-source" spellcheck="false" placeholder="Markdown source…"></textarea>
-      <div id="obsidian-status-bar">
-        <span id="obsidian-status-dot"></span>
-        <span id="obsidian-status-text">Checking Obsidian…</span>
+      <div id="sync-status-bar">
+        <span id="sync-status-dot"></span>
+        <span id="sync-status-text">Checking Asana…</span>
       </div>
     </div>
 
@@ -4180,9 +4141,9 @@
           </svg>
         </div>
         <h2 class="setup-title">Welcome to Lumina</h2>
-        <p class="setup-desc">Your new tab, reimagined. Would you like to connect to Obsidian to sync your notes and settings?</p>
+        <p class="setup-desc">Your new tab, reimagined. Connect Lumina to Asana to sync your notes with tasks in a private project.</p>
         <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-connect-btn">Connect to Obsidian</button>
+          <button class="setup-btn primary" id="setup-connect-btn">Connect to Asana</button>
           <button class="setup-btn ghost" id="setup-skip-btn">Skip for now</button>
         </div>
       </div>
@@ -4194,21 +4155,17 @@
             <path d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
           </svg>
         </div>
-        <h2 class="setup-title">Connect to Obsidian</h2>
-        <p class="setup-desc">Install the <strong>Local REST API</strong> plugin in Obsidian, then enter your API details below.</p>
+        <h2 class="setup-title">Connect to Asana</h2>
+        <p class="setup-desc">Create a Personal Access Token in Asana (Profile → My Settings → Apps → Manage Developer Apps), then paste it below. Lumina will create a private "Lumina Notes" project and sync each note as a task.</p>
         <div class="setup-fields">
           <div class="setup-field">
-            <label>REST API URL</label>
-            <input id="setup-api-url" type="text" placeholder="https://127.0.0.1:27124" />
-          </div>
-          <div class="setup-field">
-            <label>API Key</label>
-            <input id="setup-api-key" type="password" placeholder="Enter your Local REST API key" />
+            <label>Personal Access Token</label>
+            <input id="setup-asana-pat" type="password" placeholder="Paste your Asana PAT" />
           </div>
         </div>
         <div id="setup-test-status"></div>
         <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-test-btn">Test Connection</button>
+          <button class="setup-btn primary" id="setup-test-btn">Connect</button>
           <button class="setup-btn ghost" id="setup-back-btn">Back</button>
         </div>
       </div>
@@ -4221,9 +4178,9 @@
           </svg>
         </div>
         <h2 class="setup-title">Connected</h2>
-        <p class="setup-desc">Obsidian is reachable. Would you like to import existing notes and settings from your vault?</p>
+        <p class="setup-desc">Asana is reachable. Push any existing local notes up to your private project as new tasks?</p>
         <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-import-btn">Import from Vault</button>
+          <button class="setup-btn primary" id="setup-import-btn">Push Notes to Asana</button>
           <button class="setup-btn ghost" id="setup-fresh-btn">Start Fresh</button>
         </div>
       </div>
