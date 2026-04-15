@@ -11,3 +11,9 @@ Confirmed Asana's html_notes allowlist has no checkbox markup (kept existing tas
 - [x] DONE: update notes section to sync with Lumina folder in Obsidian instead of github / gist, update settings to include local rest api url and auth key
 
 - [x] DONE: when saved links or quick links are updated create a markdown file in each with a user friendly list of links. for quick links organized by section, for saved links organized by tags
+
+- [x] CHORE: only show quicklinks on main panel
+
+```FIX:
+Filtered `fromBookmark` sections out of renderLinks so main panel only renders user-defined quick-link sections. Bookmark-synced sections remain accessible via the side-panel Bookmarks tab (which reads chrome.bookmarks directly). No state or sync plumbing removed — commit: 2b3d1c0 2026.04.15 14:31:00
+```
