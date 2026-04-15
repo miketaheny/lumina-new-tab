@@ -49,6 +49,7 @@ if (state.wallpaperTheme !== undefined) {
 }
 if (!Array.isArray(state.wallpaperThemes)) state.wallpaperThemes = [];
 
+if (!Array.isArray(state.notes)) state.notes = [];
 if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
   state.activeNoteId = state.notes[0]?.id || 'note-1';
 }
@@ -56,11 +57,19 @@ if (!Array.isArray(state.addressBook)) state.addressBook = [];
 let editingId = null;
 let animFrameId = null;
 let bgTime = Math.random() * 10000;
+let archiveDebounceTimer = null;
 
 function saveState(opts) {
   localStorage.setItem('lumina_state', JSON.stringify(state));
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
+  }
+  // Debounced settings archive — snapshot every 30s at most
+  if (!opts?.skipSchedule) {
+    clearTimeout(archiveDebounceTimer);
+    archiveDebounceTimer = setTimeout(() => {
+      if (typeof archiveCurrentSettings === 'function') archiveCurrentSettings();
+    }, 30000);
   }
   if (opts?.skipSchedule) return;
   schedulePush();
@@ -303,15 +312,61 @@ function getFaviconUrl(url) {
 }
 
 
+// Detect generic/low-detail favicons by drawing to canvas and checking color variance.
+// Returns true if the image is mostly a single flat color (default/placeholder icon).
+// Uses a re-fetch with a blob to avoid CORS tainting the canvas.
+function checkGenericFavicon(img) {
+  const fallback = img.nextElementSibling;
+  if (!fallback) return;
+  const src = img.src;
+  fetch(src).then(r => r.blob()).then(blob => {
+    const blobUrl = URL.createObjectURL(blob);
+    const test = new Image();
+    test.onload = () => {
+      try {
+        const size = 32;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(test, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        const total = data.length / 4;
+        let rSum = 0, gSum = 0, bSum = 0, opaque = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] < 30) continue;
+          opaque++;
+          rSum += data[i]; gSum += data[i + 1]; bSum += data[i + 2];
+        }
+        const isGeneric = opaque < total * 0.1 || (() => {
+          const rAvg = rSum / opaque, gAvg = gSum / opaque, bAvg = bSum / opaque;
+          let variance = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 30) continue;
+            variance += (data[i] - rAvg) ** 2 + (data[i + 1] - gAvg) ** 2 + (data[i + 2] - bAvg) ** 2;
+          }
+          return (variance / (opaque * 3)) < 200;
+        })();
+        if (isGeneric) {
+          img.style.display = 'none';
+          fallback.style.display = 'flex';
+        }
+      } catch {}
+      URL.revokeObjectURL(blobUrl);
+    };
+    test.onerror = () => URL.revokeObjectURL(blobUrl);
+    test.src = blobUrl;
+  }).catch(() => {});
+}
+
 // Build favicon <img> HTML:
-//   Google service → if 16px generic globe or network error → letter
+//   Google service → if 16px generic globe, low-detail, or network error → letter
 function faviconImgHtml(url, label, cssClass, bgOverride) {
   const googleUrl = getFaviconUrl(url);
   const letter = (label || '?')[0].toUpperCase();
   const fallbackDiv = `<div class="${cssClass} fallback" style="display:none">${letter}</div>`;
   if (!googleUrl) return `<div class="${cssClass} fallback">${letter}</div>`;
   const bgStyle = bgOverride ? ` style="background:${bgOverride}"` : '';
-  const onload = `if(this.naturalWidth<=16&&this.naturalHeight<=16){this.style.display='none';this.nextElementSibling.style.display='flex'}`;
+  const onload = `if(this.naturalWidth<=16&&this.naturalHeight<=16){this.style.display='none';this.nextElementSibling.style.display='flex'}else{checkGenericFavicon(this)}`;
   const onerror = `this.style.display='none';this.nextElementSibling.style.display='flex'`;
   return `<img class="${cssClass}" src="${googleUrl}" alt=""${bgStyle} onload="${onload}" onerror="${onerror}" />${fallbackDiv}`;
 }
@@ -1506,15 +1561,13 @@ function syncSettings() {
   const locNameEl = document.getElementById('weather-loc-name');
   if (locNameEl && cachedWx?.location) locNameEl.textContent = cachedWx.location;
 
-  // bg mode toggle (OFF = colors, ON = wallpaper)
+  // bg mode segmented tabs
   const bgMode = state.bgMode || 'colors';
-  const bgModeToggle = document.getElementById('toggle-bg-mode');
-  const bgModeLabel = document.getElementById('bg-mode-label');
+  const bgModeTabs = document.querySelectorAll('.bg-mode-tab');
 
   function applyBgModeUI(mode) {
     const isWallpaper = mode === 'wallpaper';
-    bgModeToggle.classList.toggle('on', isWallpaper);
-    bgModeLabel.textContent = isWallpaper ? 'Wallpaper' : 'Colors';
+    bgModeTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
     document.getElementById('bg-pane-colors').classList.toggle('active', !isWallpaper);
     document.getElementById('bg-pane-wallpaper').classList.toggle('active', isWallpaper);
     if (isWallpaper) {
@@ -1524,11 +1577,13 @@ function syncSettings() {
     }
   }
 
-  bgModeToggle.onclick = () => {
-    state.bgMode = state.bgMode === 'wallpaper' ? 'colors' : 'wallpaper';
-    saveState();
-    applyBgModeUI(state.bgMode);
-  };
+  bgModeTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      state.bgMode = tab.dataset.mode;
+      saveState();
+      applyBgModeUI(state.bgMode);
+    });
+  });
 
   applyBgModeUI(bgMode);
 
@@ -1637,6 +1692,26 @@ function applyPanelTheme(theme) {
     btn.style.borderColor = active ? 'rgba(167,139,250,0.4)' : '';
     btn.style.color = active ? 'rgba(255,255,255,0.92)' : '';
   });
+  // Update notes panel toggle icon (moon = dark, sun = light)
+  const icon = document.getElementById('notes-theme-icon');
+  if (icon) {
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+    icon.innerHTML = isLight
+      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      : '<path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>';
+  }
+}
+
+function applySettingsTheme(theme) {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('settings-light', theme === 'light');
+  const icon = document.getElementById('settings-theme-icon');
+  if (icon) {
+    const isLight = theme === 'light';
+    icon.innerHTML = isLight
+      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      : '<path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>';
+  }
 }
 
 document.querySelectorAll('.panel-theme-btn').forEach(btn => {
@@ -1645,6 +1720,21 @@ document.querySelectorAll('.panel-theme-btn').forEach(btn => {
     saveState();
     applyPanelTheme(state.panelTheme);
   });
+});
+
+// Notes panel quick light/dark toggle
+document.getElementById('notes-theme-toggle').addEventListener('click', () => {
+  const current = state.panelTheme || 'dark';
+  state.panelTheme = current === 'light' ? 'dark' : 'light';
+  saveState();
+  applyPanelTheme(state.panelTheme);
+});
+
+// Settings panel light/dark toggle
+document.getElementById('settings-theme-toggle').addEventListener('click', () => {
+  state.settingsTheme = state.settingsTheme === 'light' ? 'dark' : 'light';
+  saveState();
+  applySettingsTheme(state.settingsTheme);
 });
 
 function openSettingsPanel() {
@@ -1887,37 +1977,27 @@ document.querySelectorAll('.notes-tab').forEach(tab => {
   });
 });
 
-// ── Inline live notes (Typora/Obsidian style): contenteditable, stored as markdown ───
-const notesEditor = document.getElementById('notes-editor');
+// ── Tiptap notes editor ──────────────────────────────────────────────────────────────
 const notesSource = document.getElementById('notes-source');
-if (notesEditor) document.execCommand('defaultParagraphSeparator', false, 'p');
+let tiptapEditor = null;
+let _notesReady = false; // guard: skip saves during initial setContent
 
-// ── Undo history (in-memory per note, resets on page load) ──
-const noteUndoStacks = {}; // { noteId: [mdSnapshot, ...] }
-const NOTE_UNDO_MAX = 50;
-let noteUndoPushTimer = null;
-
-function pushNoteHistory(noteId, content) {
-  if (!noteUndoStacks[noteId]) noteUndoStacks[noteId] = [];
-  const stack = noteUndoStacks[noteId];
-  if (stack.length && stack[stack.length - 1] === content) return;
-  stack.push(content);
-  if (stack.length > NOTE_UNDO_MAX) stack.shift();
-  updateUndoBtn();
-}
-
-function schedulePushNoteHistory() {
-  clearTimeout(noteUndoPushTimer);
-  noteUndoPushTimer = setTimeout(() => {
-    const note = state.notes?.find(n => n.id === state.activeNoteId);
-    if (note) pushNoteHistory(note.id, note.content);
-  }, 1000);
+{
+  const el = document.getElementById('notes-editor');
+  if (el && window.initTiptapEditor) {
+    tiptapEditor = window.initTiptapEditor(el, {
+      onChange: () => { saveNotes(); updateUndoBtn(); },
+      onSave:   () => { saveNotes(); flushSyncNow(); },
+    });
+  }
 }
 
 function updateUndoBtn() {
-  const stack = noteUndoStacks[state.activeNoteId];
   const btn = document.getElementById('undo-note-btn');
-  if (btn) btn.disabled = !stack || stack.length < 2;
+  if (!btn) return;
+  const canUndo = tiptapEditor ? tiptapEditor.can().undo() : false;
+  btn.disabled = !canUndo;
+  btn.style.opacity = canUndo ? '' : '0.35';
 }
 
 // ── Source mode ──
@@ -1927,7 +2007,7 @@ function enterSourceMode() {
   saveNotes();
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (notesSource) notesSource.value = note?.content ?? '';
-  if (notesEditor) notesEditor.style.display = 'none';
+  document.getElementById('notes-editor').style.display = 'none';
   if (notesSource) notesSource.style.display = 'block';
   notesSourceMode = true;
   document.getElementById('source-btn')?.classList.add('active');
@@ -1938,28 +2018,29 @@ function exitSourceMode() {
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (note && notesSource) {
     note.content = notesSource.value;
-    if (notesEditor) notesEditor.innerHTML = markdownToHtml(note.content);
-    pushNoteHistory(note.id, note.content);
+    _notesReady = false;
+    tiptapEditor?.commands.setContent(note.content);
+    _notesReady = true;
     saveState();
   }
   if (notesSource) notesSource.style.display = 'none';
-  if (notesEditor) notesEditor.style.display = '';
+  document.getElementById('notes-editor').style.display = '';
   notesSourceMode = false;
   document.getElementById('source-btn')?.classList.remove('active');
   document.querySelectorAll('#notes-toolbar .md-btn[data-cmd]').forEach(b => b.disabled = false);
 }
 
 function saveNotes() {
+  if (!_notesReady) return;
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (note) {
     if (notesSourceMode && notesSource) {
       note.content = notesSource.value;
-    } else if (notesEditor) {
-      note.content = htmlToMarkdown(notesEditor.innerHTML);
+    } else if (tiptapEditor) {
+      note.content = tiptapEditor.storage.markdown.getMarkdown();
     }
-    schedulePushNoteHistory();
   }
-  saveState({ skipSchedule: true }); // only push on Cmd+S or tab close
+  saveState({ skipSchedule: true }); // only push to Obsidian on Cmd+S or tab close
 }
 
 function renderNoteTabs() {
@@ -2041,10 +2122,11 @@ function switchNote(id) {
   const note = state.notes.find(n => n.id === id);
   if (notesSourceMode && notesSource) {
     notesSource.value = note?.content ?? '';
-  } else if (notesEditor) {
-    notesEditor.innerHTML = markdownToHtml(note?.content ?? '');
+  } else if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(note?.content ?? '');
+    _notesReady = true;
   }
-  pushNoteHistory(id, note?.content ?? '');
   saveState();
   renderNoteTabs();
   updateUndoBtn();
@@ -2064,10 +2146,12 @@ function addNote() {
   const title = uniqueNoteName('untitled');
   state.notes.push({ id, title, content: '' });
   state.activeNoteId = id;
-  if (notesEditor) notesEditor.innerHTML = '<h1>Untitled</h1>';
+  _notesReady = false;
+  tiptapEditor?.commands.setContent('');
+  _notesReady = true;
   saveState();
   renderNoteTabs();
-  notesEditor?.focus();
+  tiptapEditor?.commands.focus();
 }
 
 function deleteNote(id) {
@@ -2075,20 +2159,22 @@ function deleteNote(id) {
   if (!confirm('Delete this note?')) return;
   const idx = state.notes.findIndex(n => n.id === id);
   const deleted = state.notes[idx];
-  const gistIdToDelete = deleted?.gistId;
   state.notes.splice(idx, 1);
   if (state.activeNoteId === id) {
     state.activeNoteId = state.notes[Math.max(0, idx - 1)].id;
   }
   const note = state.notes.find(n => n.id === state.activeNoteId);
-  if (notesEditor) notesEditor.innerHTML = markdownToHtml(note?.content ?? '');
+  if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(note?.content ?? '');
+    _notesReady = true;
+  }
   saveState();
   renderNoteTabs();
-  if (gistIdToDelete && getSyncPat()) {
-    fetch(`https://api.github.com/gists/${gistIdToDelete}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${getSyncPat()}` },
-    }).then(r => { if (!r.ok) showToast(`⚠ Delete gist: ${r.status}`); }).catch(() => {});
+  clearSyncSnapshot(id);
+  if (deleted && isSyncConfigured()) {
+    const path = deleted.vaultPath || noteVaultPath(deleted);
+    obsidianDelete(path).then(r => { if (!r.ok && r.status !== 404) showToast(`⚠ Delete note: ${r.status}`); }).catch(() => {});
   }
 }
 
@@ -2138,18 +2224,22 @@ function loadNotes() {
   const note = state.notes.find(n => n.id === state.activeNoteId) || state.notes[0];
   state.activeNoteId = note.id;
   let content = note.content ?? '';
+  // Migrate old HTML-stored notes to markdown
   if (content && content.trimStart().startsWith('<')) {
     note.content = htmlToMarkdown(content);
     content = note.content;
     saveState();
   }
-  if (notesEditor) notesEditor.innerHTML = markdownToHtml(content);
-  pushNoteHistory(note.id, content);
+  if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(content);
+    _notesReady = true;
+  }
   updateUndoBtn();
   renderNoteTabs();
 }
 
-if (notesEditor) notesEditor.addEventListener('input', saveNotes);
+// Source textarea: save on input, Cmd+S flushes
 if (notesSource) notesSource.addEventListener('input', saveNotes);
 if (notesSource) notesSource.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -2159,137 +2249,39 @@ if (notesSource) notesSource.addEventListener('keydown', e => {
   }
 });
 
-// Paste: convert markdown to HTML when pasting plain markdown
-function looksLikeMarkdown(text) {
-  return /^#{1,6} .+/m.test(text) || /\*\*.+\*\*/s.test(text) || /^- \[[ xX]\]/m.test(text) ||
-    /^[-*] .+/m.test(text) || /\[.+\]\(https?:\/\/.+\)/.test(text);
-}
-notesEditor?.addEventListener('paste', e => {
-  const plain = e.clipboardData.getData('text/plain');
-  if (!plain || e.clipboardData.types.includes('text/html')) return;
-  if (!looksLikeMarkdown(plain)) return;
-  e.preventDefault();
-  document.execCommand('insertHTML', false, markdownToHtml(plain));
-  saveNotes();
-});
-
-// Checkbox toggle
-notesEditor?.addEventListener('click', e => {
-  const chk = e.target.closest('.note-chk');
-  if (!chk) return;
-  e.preventDefault();
-  const item = chk.closest('.check-item');
-  const isChecked = item.dataset.checked === 'true';
-  item.dataset.checked = isChecked ? 'false' : 'true';
-  chk.classList.toggle('checked', !isChecked);
-  chk.textContent = isChecked ? '' : '✓';
-  saveNotes();
-});
-
-// Toolbar: execCommand for inline formatting
-function getAnchorBlock() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  let node = sel.anchorNode;
-  while (node && node !== notesEditor) {
-    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|DIV|LI)$/.test(node.tagName)) return node;
-    node = node.parentNode;
-  }
-  return null;
-}
-
-function insertCodeFmt() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const selText = range.toString();
-  const code = document.createElement('code');
-  code.textContent = selText || '\u200b';
-  range.deleteContents();
-  range.insertNode(code);
-  const r = document.createRange();
-  r.selectNodeContents(code);
-  if (!selText) r.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(r);
-}
-
-function createCheckItem(text, checked) {
-  const item = document.createElement('div');
-  item.className = 'check-item';
-  item.dataset.checked = checked ? 'true' : 'false';
-  item.contentEditable = 'false';
-  const btn = document.createElement('button');
-  btn.className = 'note-chk' + (checked ? ' checked' : '');
-  btn.type = 'button';
-  btn.contentEditable = 'false';
-  if (checked) btn.textContent = '✓';
-  const span = document.createElement('span');
-  span.className = 'check-text';
-  span.contentEditable = 'true';
-  if (text) span.textContent = text;
-  item.appendChild(btn);
-  item.appendChild(span);
-  return item;
-}
-
-function insertCheckItem() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const selText = range.toString();
-  const item = createCheckItem(selText, false);
-  range.deleteContents();
-  const anchor = getAnchorBlock();
-  if (anchor && anchor.parentNode === notesEditor) {
-    anchor.after(item);
-  } else {
-    range.insertNode(item);
-  }
-  const span = item.querySelector('.check-text');
-  span.focus();
-  const r = document.createRange();
-  r.setStart(span, 0);
-  r.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(r);
-  saveNotes();
-}
-
+// Toolbar commands via Tiptap API
 function applyCmd(cmd) {
-  notesEditor?.focus();
+  if (!tiptapEditor) return;
+  const ch = tiptapEditor.chain().focus();
   switch (cmd) {
-    case 'bold':   document.execCommand('bold'); break;
-    case 'italic': document.execCommand('italic'); break;
-    case 'strike': {
-      const sel = window.getSelection();
-      if (sel && sel.isCollapsed) {
-        const block = getAnchorBlock();
-        if (block) {
-          const range = document.createRange();
-          range.selectNodeContents(block);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-      document.execCommand('strikeThrough');
+    case 'bold':         ch.toggleBold().run(); break;
+    case 'italic':       ch.toggleItalic().run(); break;
+    case 'underline':    ch.toggleUnderline().run(); break;
+    case 'strike':       ch.toggleStrike().run(); break;
+    case 'highlight':    ch.toggleHighlight().run(); break;
+    case 'h1':           ch.toggleHeading({ level: 1 }).run(); break;
+    case 'h2':           ch.toggleHeading({ level: 2 }).run(); break;
+    case 'h3':           ch.toggleHeading({ level: 3 }).run(); break;
+    case 'code':         ch.toggleCode().run(); break;
+    case 'codeblock':    ch.toggleCodeBlock().run(); break;
+    case 'blockquote':   ch.toggleBlockquote().run(); break;
+    case 'list':         ch.toggleBulletList().run(); break;
+    case 'olist':        ch.toggleOrderedList().run(); break;
+    case 'check':        ch.toggleTaskList().run(); break;
+    case 'sub':          ch.toggleSubscript().run(); break;
+    case 'sup':          ch.toggleSuperscript().run(); break;
+    case 'align-left':   ch.setTextAlign('left').run(); break;
+    case 'align-center': ch.setTextAlign('center').run(); break;
+    case 'align-right':  ch.setTextAlign('right').run(); break;
+    case 'link': {
+      const prev = tiptapEditor.getAttributes('link').href ?? '';
+      const url = window.prompt('URL:', prev || 'https://');
+      if (url === null) { tiptapEditor.commands.focus(); break; }
+      if (!url) { ch.unsetLink().run(); break; }
+      ch.setLink({ href: url }).run();
       break;
     }
-    case 'h1': {
-      const b = getAnchorBlock();
-      document.execCommand('formatBlock', false, b?.tagName === 'H1' ? 'p' : 'h1');
-      break;
-    }
-    case 'h2': {
-      const b = getAnchorBlock();
-      document.execCommand('formatBlock', false, b?.tagName === 'H2' ? 'p' : 'h2');
-      break;
-    }
-    case 'code':  insertCodeFmt(); break;
-    case 'list':  document.execCommand('insertUnorderedList'); break;
-    case 'check': insertCheckItem(); break;
   }
-  saveNotes();
 }
 
 document.querySelectorAll('.md-btn[data-cmd]').forEach(btn => {
@@ -2297,20 +2289,7 @@ document.querySelectorAll('.md-btn[data-cmd]').forEach(btn => {
 });
 
 document.getElementById('undo-note-btn').addEventListener('click', () => {
-  const noteId = state.activeNoteId;
-  const stack = noteUndoStacks[noteId];
-  if (!stack || stack.length < 2) return;
-  stack.pop(); // discard current state
-  const prev = stack[stack.length - 1];
-  const note = state.notes.find(n => n.id === noteId);
-  if (!note) return;
-  note.content = prev;
-  if (notesSourceMode && notesSource) {
-    notesSource.value = prev;
-  } else if (notesEditor) {
-    notesEditor.innerHTML = markdownToHtml(prev);
-  }
-  saveState();
+  tiptapEditor?.chain().focus().undo().run();
   updateUndoBtn();
 });
 
@@ -2319,37 +2298,31 @@ document.getElementById('source-btn').addEventListener('click', () => {
 });
 
 document.getElementById('clear-checked-btn').addEventListener('click', () => {
-  const checked = Array.from(notesEditor?.querySelectorAll('.check-item[data-checked="true"]') || []);
-  const struckLis = Array.from(notesEditor?.querySelectorAll('li') || []).filter(li => {
-    const text = li.querySelector('s, del, strike');
-    if (!text) return false;
-    // Only remove if the entire text content is struck (not just part of it)
-    const liText = li.textContent.trim();
-    const struckText = Array.from(li.querySelectorAll('s, del, strike')).map(s => s.textContent).join('').trim();
-    return liText && liText === struckText;
-  });
-  const total = checked.length + struckLis.length;
-  if (!total) { showToast('No completed items to clear'); return; }
-  checked.forEach(el => el.remove());
-  struckLis.forEach(li => {
-    const list = li.parentElement;
-    li.remove();
-    if (list && !list.querySelector('li')) list.remove();
-  });
+  if (!tiptapEditor) return;
+  const md = tiptapEditor.storage.markdown.getMarkdown();
+  let count = 0;
+  const filtered = md.split('\n').filter(line => {
+    if (/^- \[x\] /i.test(line.trim())) { count++; return false; }
+    return true;
+  }).join('\n');
+  if (!count) { showToast('No completed tasks to clear'); return; }
+  _notesReady = false;
+  tiptapEditor.commands.setContent(filtered);
+  _notesReady = true;
   saveNotes();
-  showToast(`✓ Cleared ${total} completed item${total > 1 ? 's' : ''}`);
+  showToast(`✓ Cleared ${count} completed task${count > 1 ? 's' : ''}`);
 });
 
 document.getElementById('copy-md-btn').addEventListener('click', () => {
-  const md = notesEditor ? htmlToMarkdown(notesEditor.innerHTML) : '';
+  const md = tiptapEditor ? tiptapEditor.storage.markdown.getMarkdown() : '';
   navigator.clipboard.writeText(md)
     .then(() => showToast('✓ Copied as Markdown'))
     .catch(() => showToast('Could not access clipboard'));
 });
 
 document.getElementById('copy-notes-btn').addEventListener('click', () => {
-  const html = notesEditor?.innerHTML ?? '';
-  const plain = notesEditor ? htmlToMarkdown(notesEditor.innerHTML) : '';
+  const html = tiptapEditor ? tiptapEditor.getHTML() : '';
+  const plain = tiptapEditor ? tiptapEditor.storage.markdown.getMarkdown() : '';
   try {
     const item = new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
@@ -2365,140 +2338,8 @@ document.getElementById('copy-notes-btn').addEventListener('click', () => {
   }
 });
 
-// Keyboard: Enter in checklist, list exit, Cmd+B/I/1/2/E/L/⇧C/S
-notesEditor?.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    saveNotes();
-    flushSyncNow();
-    return;
-  }
-  const sel = window.getSelection();
-  const anchor = sel.rangeCount ? sel.anchorNode : null;
-  const checkText = anchor?.nodeType === Node.ELEMENT_NODE ? anchor.closest?.('.check-text') : anchor?.parentElement?.closest('.check-text');
-
-  if (e.key === 'Enter' && checkText) {
-    e.preventDefault();
-    const currentItem = checkText.closest('.check-item');
-    const isEmpty = checkText.textContent.replace(/\u200b/g, '').trim() === '';
-    if (isEmpty) {
-      const p = document.createElement('p');
-      p.innerHTML = '\u200b';
-      currentItem.after(p);
-      currentItem.remove();
-      p.focus();
-      const r = document.createRange();
-      r.setStart(p.firstChild, 0);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    } else {
-      const newItem = createCheckItem('', false);
-      currentItem.after(newItem);
-      newItem.querySelector('.check-text').focus();
-      const r = document.createRange();
-      r.setStart(newItem.querySelector('.check-text'), 0);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    }
-    saveNotes();
-    return;
-  }
-
-  if (e.key === 'Enter' && !checkText) {
-    let node = sel.rangeCount ? sel.anchorNode : null;
-    let li = null;
-    while (node && node !== notesEditor) {
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'LI') { li = node; break; }
-      node = node.parentNode;
-    }
-    if (li) {
-      const isEmpty = li.textContent.replace(/\u200b/g, '').trim() === '';
-      if (isEmpty) {
-        e.preventDefault();
-        const list = li.closest('ul, ol');
-        const p = document.createElement('p');
-        p.innerHTML = '\u200b';
-        list.after(p);
-        li.remove();
-        if (!list.querySelector('li')) list.remove();
-        const r = document.createRange();
-        r.setStart(p.firstChild, 0);
-        r.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(r);
-        saveNotes();
-        return;
-      }
-      setTimeout(saveNotes, 0);
-    }
-  }
-
-  if (e.key === 'Backspace' && checkText && sel.isCollapsed) {
-    if (checkText.textContent.replace(/\u200b/g, '') === '') {
-      e.preventDefault();
-      const item = checkText.closest('.check-item');
-      const prev = item.previousSibling;
-      item.remove();
-      if (prev) {
-        const r = document.createRange();
-        r.selectNodeContents(prev);
-        r.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(r);
-      }
-      saveNotes();
-      return;
-    }
-  }
-
-  const mod = e.metaKey || e.ctrlKey;
-  if (!mod) return;
-  const map = { b: 'bold', i: 'italic', '1': 'h1', '2': 'h2', e: 'code', l: 'list' };
-  if (e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); applyCmd('check'); return; }
-  if (e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); applyCmd('strike'); return; }
-  if (map[e.key.toLowerCase()]) { e.preventDefault(); applyCmd(map[e.key.toLowerCase()]); }
-});
-
-// Migrate old plain-text / markdown content to HTML
-function markdownToHtml(text) {
-  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const inline = s => esc(s)
-    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/_(.+?)_/g,'<em>$1</em>')
-    .replace(/~~(.+?)~~/g,'<s>$1</s>')
-    .replace(/`(.+?)`/g,'<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g,'<a href="$2">$1</a>');
-  const lines = text.split('\n');
-  const out = [];
-  let inUl = false;
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) { if (inUl) { out.push('</ul>'); inUl = false; } continue; }
-    if (/^### /.test(line)) { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h3>${inline(line.slice(4))}</h3>`); continue; }
-    if (/^## /.test(line))  { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h2>${inline(line.slice(3))}</h2>`); continue; }
-    if (/^# /.test(line))   { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h1>${inline(line.slice(2))}</h1>`); continue; }
-    if (/^---+$/.test(t))   { if (inUl) { out.push('</ul>'); inUl=false; } out.push('<hr>'); continue; }
-    if (/^- \[x\] /i.test(line)) {
-      if (inUl) { out.push('</ul>'); inUl=false; }
-      out.push(`<div class="check-item" data-checked="true" contenteditable="false"><button class="note-chk checked" type="button" contenteditable="false">✓</button><span class="check-text" contenteditable="true">${inline(line.slice(6))}</span></div>`);
-      continue;
-    }
-    if (/^- \[ \] /.test(line)) {
-      if (inUl) { out.push('</ul>'); inUl=false; }
-      out.push(`<div class="check-item" data-checked="false" contenteditable="false"><button class="note-chk" type="button" contenteditable="false"></button><span class="check-text" contenteditable="true">${inline(line.slice(6))}</span></div>`);
-      continue;
-    }
-    if (/^- /.test(line)) { if (!inUl) { out.push('<ul>'); inUl=true; } out.push(`<li>${inline(line.slice(2))}</li>`); continue; }
-    if (inUl) { out.push('</ul>'); inUl=false; }
-    out.push(`<p>${inline(line)}</p>`);
-  }
-  if (inUl) out.push('</ul>');
-  return out.join('');
-}
+// Keyboard shortcuts handled in tiptap-bundle.js (Cmd+B/I/U/1/2/3/E/L/⇧C/⇧X/K/S)
+// Source textarea Cmd+S handled above
 
 loadNotes();
 
@@ -2834,6 +2675,7 @@ let savedFilter = 'all';
 let savedSort = 'date'; // 'date' | 'title'
 let selectedTagsForSave = [];
 let selectedTagColor = TAG_COLORS[6];
+let editingLinkId = null;
 
 async function loadSavedLinks() {
   if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -2950,6 +2792,9 @@ function renderSavedList() {
         ${tagsHtml ? `<div class="saved-item-tags">${tagsHtml}</div>` : ''}
       </div>
       <div class="saved-item-actions">
+        <button class="saved-item-edit" title="Edit tags">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
         <button class="saved-item-copy" title="Copy URL">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
@@ -2959,6 +2804,11 @@ function renderSavedList() {
       </div>
     `;
 
+    item.querySelector('.saved-item-edit').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSaveModal({ id: link.id, url: link.url, title: link.title, tags: link.tags });
+    });
     item.querySelector('.saved-item-copy').addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -2978,10 +2828,13 @@ function renderSavedList() {
 
 // ── Save link modal ──────────────────────────────
 function openSaveModal(prefill = {}) {
-  selectedTagsForSave = [];
+  editingLinkId = prefill.id || null;
+  selectedTagsForSave = Array.isArray(prefill.tags) ? [...prefill.tags] : [];
   selectedTagColor = TAG_COLORS[6];
   document.getElementById('saved-modal-url').value = prefill.url || '';
   document.getElementById('saved-modal-title').value = prefill.title || '';
+  document.getElementById('saved-modal-heading').textContent = editingLinkId ? 'Edit Link' : 'Save Link';
+  document.getElementById('saved-modal-save').textContent = editingLinkId ? 'Save Changes' : 'Save Link';
   renderSaveTagSelector();
 
   const m = document.getElementById('saved-modal');
@@ -2999,6 +2852,7 @@ function closeSaveModal() {
   m.classList.add('closing');
   m.querySelector('.modal').classList.add('closing');
   setTimeout(() => { m.style.display = 'none'; }, 200);
+  editingLinkId = null;
 }
 
 function renderSaveTagSelector() {
@@ -3081,17 +2935,27 @@ document.getElementById('saved-modal-save').addEventListener('click', async () =
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   if (!title) title = getUrlLabel(url);
 
-  savedData.links.push({
-    id: 'sl-' + Date.now(),
-    url, title,
-    tags: [...selectedTagsForSave],
-    savedAt: Date.now(),
-  });
+  if (editingLinkId) {
+    const link = savedData.links.find(l => l.id === editingLinkId);
+    if (link) {
+      link.url = url;
+      link.title = title;
+      link.tags = [...selectedTagsForSave];
+    }
+  } else {
+    savedData.links.push({
+      id: 'sl-' + Date.now(),
+      url, title,
+      tags: [...selectedTagsForSave],
+      savedAt: Date.now(),
+    });
+  }
+  const wasEdit = !!editingLinkId;
   await persistSavedLinks();
   closeSaveModal();
   renderSavedFilters();
   renderSavedList();
-  showToast('✓ Link saved');
+  showToast(wasEdit ? '✓ Link updated' : '✓ Link saved');
 });
 
 // Listen for popup saves
@@ -3106,92 +2970,210 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
 }
 
 // ─── INIT ────────────────────────────────────────
-// ─── GITHUB GIST SYNC ────────────────────────────
-const SYNC_FILE = 'lumina-newtab.json';
+// ─── OBSIDIAN LOCAL REST API SYNC ─────────────────
+const OBSIDIAN_FOLDER = 'Lumina';
+const OBSIDIAN_SETTINGS_FILE = `${OBSIDIAN_FOLDER}/.lumina-sync.json`;
 let syncDebounceTimer = null;
+let syncInProgress = false;
+let vaultCheckInProgress = false;
+let lastPullTime = 0;
+let vaultCheckInterval = null;
 
-function getSyncPat()    { return localStorage.getItem('lumina_sync_pat') || ''; }
-function getSyncGistId() { return localStorage.getItem('lumina_sync_gist_id') || ''; }
-function setSyncGistId(id) { localStorage.setItem('lumina_sync_gist_id', id); }
-function getSyncGistOwner() { return localStorage.getItem('lumina_sync_gist_owner') || ''; }
-function setSyncGistOwner(owner) { if (owner) localStorage.setItem('lumina_sync_gist_owner', owner); }
-function getSyncGistUrl() {
-  const id = getSyncGistId();
-  const owner = getSyncGistOwner();
-  if (!id) return '';
-  return owner ? `https://gist.github.com/${owner}/${id}` : `https://gist.github.com/${id}`;
+// Sync snapshots: stores the content of each note at last successful sync
+// Used for three-way merge to detect which side changed
+function getSyncSnapshots() {
+  try { return JSON.parse(localStorage.getItem('lumina_sync_snapshots') || '{}'); } catch { return {}; }
 }
+function saveSyncSnapshots(snapshots) {
+  localStorage.setItem('lumina_sync_snapshots', JSON.stringify(snapshots));
+}
+function updateSyncSnapshot(noteId, content) {
+  const s = getSyncSnapshots();
+  s[noteId] = content.trim();
+  saveSyncSnapshots(s);
+}
+function clearSyncSnapshot(noteId) {
+  const s = getSyncSnapshots();
+  delete s[noteId];
+  saveSyncSnapshots(s);
+}
+
+function getSyncApiUrl() { return (localStorage.getItem('lumina_sync_api_url') || '').trim().replace(/\/+$/, ''); }
+function getSyncApiKey() { return (localStorage.getItem('lumina_sync_api_key') || '').trim(); }
+function isSyncConfigured() { return !!(getSyncApiUrl() && getSyncApiKey()); }
 
 function setSyncStatus(msg) {
   const el = document.getElementById('sync-status');
   if (el) el.textContent = msg;
+  setObsidianStatusText(msg);
 }
 
-function noteGistFilename(note) {
-  const name = (note.title || note.id).replace(/[/\\?%*:|"<>]/g, '-').trim() || note.id;
-  return `notes_${name}.md`;
+function setObsidianStatus(state, msg) {
+  const bar = document.getElementById('obsidian-status-bar');
+  if (!bar) return;
+  bar.className = state; // 'connected', 'disconnected', 'syncing', or ''
+  const textEl = document.getElementById('obsidian-status-text');
+  if (textEl && msg) textEl.textContent = msg;
 }
 
-let syncInProgress = false;
+function setObsidianStatusText(msg) {
+  const textEl = document.getElementById('obsidian-status-text');
+  if (textEl && msg) textEl.textContent = msg;
+}
 
-async function syncErrorFromResponse(resp, label) {
-  const status = resp.status;
-  let msg = `${label}: ${status}`;
-  try {
-    const body = await resp.json();
-    if (body?.message) msg += ` — ${body.message}`;
-  } catch {
-    const text = await resp.text();
-    if (text) msg += ` — ${text.slice(0, 60)}`;
+function obsidianHeaders() {
+  return { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': 'text/markdown' };
+}
+
+function obsidianJsonHeaders() {
+  return { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': 'application/json' };
+}
+
+function noteVaultPath(note) {
+  const name = (note.title || note.id).replace(/[/\\?%*:|"<>#^[\]]/g, '-').trim() || note.id;
+  return `${OBSIDIAN_FOLDER}/${name}.md`;
+}
+
+function obsidianVaultUrl(path) {
+  // Encode each path segment individually — slashes must remain literal
+  return getSyncApiUrl() + '/vault/' + path.split('/').map(s => encodeURIComponent(s)).join('/');
+}
+
+async function obsidianPut(path, content, contentType) {
+  const url = obsidianVaultUrl(path);
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${getSyncApiKey()}`, 'Content-Type': contentType || 'text/markdown' },
+    body: content,
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`PUT ${path}: ${resp.status} ${text.slice(0, 80)}`);
   }
-  if (status === 401) msg += ' (Check token is valid and not expired.)';
-  if (status === 403) {
-    const reset = resp.headers.get('X-RateLimit-Reset');
-    if (reset) {
-      const resetTime = new Date(parseInt(reset, 10) * 1000);
-      const mins = Math.ceil((resetTime - Date.now()) / 60000);
-      msg += ` — Rate limit resets at ${resetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (~${mins}m)`;
-    } else {
-      msg += ' (Token needs "gist" scope, or rate limited — try again shortly.)';
+  return resp;
+}
+
+async function obsidianGet(path) {
+  const url = obsidianVaultUrl(path);
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'text/markdown' },
+  });
+  return resp;
+}
+
+async function obsidianDelete(path) {
+  const url = obsidianVaultUrl(path);
+  const resp = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getSyncApiKey()}` },
+  });
+  return resp;
+}
+
+async function obsidianList() {
+  const url = obsidianVaultUrl(OBSIDIAN_FOLDER + '/');
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'application/json' },
+  });
+  if (resp.status === 404) return [];
+  if (!resp.ok) throw new Error(`List folder: ${resp.status}`);
+  const data = await resp.json();
+  return data.files || [];
+}
+
+function buildQuickLinksMarkdown() {
+  const sections = state.qlSections || [{ id: 'default', label: 'Quick Links' }];
+  const links = state.links || [];
+  const grouped = new Map(sections.map(s => [s.id, []]));
+  for (const link of links) {
+    const bucket = grouped.get(link.section) || grouped.get('default') || [];
+    bucket.push(link);
+    if (!grouped.has(link.section)) grouped.set(link.section, bucket);
+  }
+  let md = '# Quick Links\n\n';
+  for (const section of sections) {
+    const items = grouped.get(section.id) || [];
+    if (sections.length > 1) md += `## ${section.label}\n\n`;
+    if (!items.length) { md += '_No links_\n\n'; continue; }
+    for (const link of items) {
+      md += `- [${link.label}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+  return md.trimEnd() + '\n';
+}
+
+function buildSavedLinksMarkdown() {
+  const links = savedData?.links || [];
+  const tags = savedData?.tags || [];
+  if (!links.length) return '# Saved Links\n\n_No saved links_\n';
+
+  let md = '# Saved Links\n\n';
+
+  // Group by tags
+  const tagMap = new Map();
+  const untagged = [];
+  for (const link of links) {
+    if (!link.tags?.length) { untagged.push(link); continue; }
+    for (const tag of link.tags) {
+      if (!tagMap.has(tag)) tagMap.set(tag, []);
+      tagMap.get(tag).push(link);
     }
   }
-  return new Error(msg);
+
+  // Render tagged sections (in tag definition order)
+  for (const tag of tags) {
+    const items = tagMap.get(tag.name);
+    if (!items?.length) continue;
+    md += `## ${tag.name}\n\n`;
+    for (const link of items) {
+      md += `- [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  // Render any tags not in the tags list
+  for (const [tagName, items] of tagMap) {
+    if (tags.find(t => t.name === tagName)) continue;
+    md += `## ${tagName}\n\n`;
+    for (const link of items) {
+      md += `- [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  // Render untagged
+  if (untagged.length) {
+    md += `## Untagged\n\n`;
+    for (const link of untagged) {
+      md += `- [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  return md.trimEnd() + '\n';
 }
 
 function buildSyncPayload() {
-  // Main gist: state without note bodies; each note has its own gist. No base64: wallpapers are metadata-only.
-  const stateForGist = { ...state };
-  stateForGist.notes = (state.notes || []).map(n => ({ id: n.id, title: n.title, gistId: n.gistId || null, gistFilename: n.gistFilename || null }));
-  // Sync wallpaper list (id, label, emoji) but never image data — keeps gist small
+  const stateForSync = { ...state };
+  stateForSync.notes = (state.notes || []).map(n => ({ id: n.id, title: n.title, vaultPath: noteVaultPath(n) }));
   if (Array.isArray(state.wallpapers)) {
-    stateForGist.wallpapers = state.wallpapers.map(w => ({ id: w.id, label: w.label, emoji: w.emoji }));
+    stateForSync.wallpapers = state.wallpapers.map(w => ({ id: w.id, label: w.label, emoji: w.emoji }));
   }
-  return JSON.stringify({
-    v: 1,
-    ts: Date.now(),
-    state: stateForGist,
-    saved: savedData,
-  });
+  return JSON.stringify({ v: 2, ts: Date.now(), state: stateForSync, saved: savedData }, null, 2);
 }
 
 async function applySyncPayload(json, options) {
-  let gistFiles = null;
-  let skipNoteContent = false;
-  let skipSave = false;
-  if (options != null && typeof options === 'object') {
-    if (options.skipNoteContent === true) skipNoteContent = true;
-    if (options.skipSave === true) skipSave = true;
-    if (!('skipNoteContent' in options) && !('skipSave' in options)) gistFiles = options;
-  }
+  const skipNoteContent = options?.skipNoteContent === true;
+  const skipSave = options?.skipSave === true;
   let data;
   try { data = JSON.parse(json); } catch { return; }
-  if (!data || data.v !== 1) return;
+  if (!data || (data.v !== 2 && data.v !== 1)) return;
 
   if (data.state) {
     const localWallpapers = state.wallpapers;
     Object.assign(state, data.state);
     if (!Array.isArray(state.addressBook)) state.addressBook = [];
-    // Restore wallpaper image data from this device (gist only has id/label/emoji)
     if (Array.isArray(state.wallpapers) && Array.isArray(localWallpapers)) {
       const byId = new Map(localWallpapers.map(w => [w.id, w]));
       state.wallpapers = state.wallpapers.map(w => {
@@ -3201,16 +3183,8 @@ async function applySyncPayload(json, options) {
           : { ...w, url: w.url || '', thumb: w.thumb || '' };
       });
     }
-    // Note content: filled by pullSync from per-note gists
     if (!skipNoteContent && Array.isArray(state.notes)) {
-      if (gistFiles) {
-        state.notes = state.notes.map(n => ({
-          ...n,
-          content: gistFiles[`lumina-note-${n.id}.md`]?.content ?? (n.content ?? ''),
-        }));
-      } else {
-        state.notes = state.notes.map(n => ({ ...n, content: n.content ?? '' }));
-      }
+      state.notes = state.notes.map(n => ({ ...n, content: n.content ?? '' }));
     }
     if (!Array.isArray(state.notes) || !state.notes.length) {
       state.notes = [{ id: 'note-1', title: 'Note 1', content: '' }];
@@ -3239,234 +3213,529 @@ async function applySyncPayload(json, options) {
 }
 
 async function pushSync() {
-  const pat = getSyncPat();
-  if (!pat) return;
+  if (!isSyncConfigured()) return;
   if (syncInProgress) return;
   syncInProgress = true;
-  const auth = { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' };
+  setObsidianStatus('syncing', 'Pushing to Obsidian…');
   try {
     const notes = Array.isArray(state.notes) ? state.notes : [];
-    const needGist = notes.filter(n => n && n.id && !n.gistId);
-    console.log(notes);
-    // 1. Create a separate gist for any note that doesn't have one yet
-    if (needGist.length) {
-      setSyncStatus(`Creating ${needGist.length} note gist(s)…`);
-      for (const note of needGist) {
-        const filename = noteGistFilename(note);
-        const body = (note.content ?? '').toString();
-        const resp = await fetch('https://api.github.com/gists', {
-          method: 'POST',
-          headers: auth,
-          body: JSON.stringify({
-            description: String(note.id),
-            public: false,
-            files: { [filename]: { content: body || ' ' } },
-          }),
-        });
-        if (!resp.ok) throw await syncErrorFromResponse(resp, 'Note gist');
-        const result = await resp.json();
-        if (result && result.id) {
-          note.gistId = result.id;
-          note.gistFilename = filename;
-        } else {
-          throw new Error('Note gist: no id in response');
-        }
+
+    // 1. Push each note as a .md file in the Lumina folder
+    setObsidianStatus('syncing', `Pushing ${notes.length} note(s)…`);
+    for (const note of notes) {
+      const newPath = noteVaultPath(note);
+      const oldPath = note.vaultPath;
+      if (oldPath && oldPath !== newPath) {
+        await obsidianDelete(oldPath).catch(() => {});
       }
-      saveState({ skipSchedule: true });
+      const content = (note.content ?? '').toString() || ' ';
+      await obsidianPut(newPath, content);
+      note.vaultPath = newPath;
     }
 
-    // 2. Push main gist (settings, links, note list with gistIds)
-    setSyncStatus('Pushing main gist…');
-    const content = buildSyncPayload();
-    const gistId = getSyncGistId();
-    const mainFiles = { [SYNC_FILE]: { content } };
-    let resp;
-    if (gistId) {
-      resp = await fetch(`https://api.github.com/gists/${gistId}`, {
-        method: 'PATCH',
-        headers: auth,
-        body: JSON.stringify({ files: mainFiles }),
-      });
-    } else {
-      resp = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: auth,
-        body: JSON.stringify({
-          description: 'Lumina New Tab Sync',
-          public: false,
-          files: mainFiles,
-        }),
-      });
-    }
-    if (!resp.ok) throw await syncErrorFromResponse(resp, 'Main gist');
-    const result = await resp.json();
-    if (!gistId && result && result.id) setSyncGistId(result.id);
-    if (result && result.owner && result.owner.login) setSyncGistOwner(result.owner.login);
-    updateSyncGistLink();
+    // 2. Push quick links and saved links as markdown
+    setObsidianStatus('syncing', 'Pushing links…');
+    await obsidianPut(`${OBSIDIAN_FOLDER}/Quick Links.md`, buildQuickLinksMarkdown());
+    await obsidianPut(`${OBSIDIAN_FOLDER}/Saved Links.md`, buildSavedLinksMarkdown());
 
-    // 3. Update each note's gist with current content
-    const withGist = notes.filter(n => n && n.gistId);
-    if (withGist.length) {
-      setSyncStatus(`Updating ${withGist.length} note(s)…`);
-      for (const note of withGist) {
-        const newFilename = noteGistFilename(note);
-        const oldFilename = note.gistFilename || newFilename;
-        const fileEntry = { content: (note.content ?? '').toString() || ' ' };
-        if (oldFilename !== newFilename) fileEntry.filename = newFilename;
-        const pr = await fetch(`https://api.github.com/gists/${note.gistId}`, {
-          method: 'PATCH',
-          headers: auth,
-          body: JSON.stringify({ files: { [oldFilename]: fileEntry } }),
-        });
-        if (pr.ok) note.gistFilename = newFilename;
-        else { const e = await syncErrorFromResponse(pr, 'Note update'); setSyncStatus(e.message); showToast(`⚠ ${e.message}`); }
-      }
+    // 3. Push settings/state file
+    setObsidianStatus('syncing', 'Pushing settings…');
+    await obsidianPut(OBSIDIAN_SETTINGS_FILE, buildSyncPayload(), 'application/json');
+
+    // Save sync snapshots so we can detect which side changed later
+    for (const note of notes) {
+      updateSyncSnapshot(note.id, (note.content ?? '').toString());
     }
 
     saveState({ skipSchedule: true });
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSyncStatus(`Synced ${t}`);
+    setObsidianStatus('connected', `Synced to Obsidian — ${t}`);
   } catch (err) {
     setSyncStatus(`Sync error: ${err.message}`);
     showToast(`⚠ ${err.message}`);
+    setObsidianStatus('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
   } finally {
     syncInProgress = false;
   }
 }
 
 async function pullSync() {
-  const pat = getSyncPat();
-  if (!pat) return;
-  const gistId = getSyncGistId();
-  if (!gistId) { await pushSync(); return; }
-  const auth = { Authorization: `Bearer ${pat}` };
+  if (!isSyncConfigured()) return;
   try {
-    setSyncStatus('Syncing…');
-    const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers: auth });
-    if (!resp.ok) throw await syncErrorFromResponse(resp, 'Pull');
-    const result = await resp.json();
-    setSyncGistOwner(result.owner?.login);
-    updateSyncGistLink();
-    const content = result.files?.[SYNC_FILE]?.content;
-    const gistFiles = result.files || {};
-    if (content) {
-     
-        // Snapshot local notes (with content) before applySyncPayload can overwrite them
-        const localNotes = (state.notes || []).map(n => ({ ...n }));
-        const localById = new Map(localNotes.map(n => [n.id, n]));
-        const localActiveNoteId = state.activeNoteId;
+    setSyncStatus('Pulling from vault…');
+    setObsidianStatus('syncing', 'Pulling from Obsidian…');
 
-        // Parse gist note metadata separately so we can merge without losing local content
-        let gistNotesMeta = [];
-        try { gistNotesMeta = JSON.parse(content)?.state?.notes || []; } catch {}
-
-        // Apply settings/links from gist; skip save so partial state never hits localStorage
-        await applySyncPayload(content, { skipNoteContent: true, skipSave: true });
-
-        // Immediately restore local notes — they are the source of truth for content
-        state.notes = localNotes;
-        // Restore local active note (applySyncPayload's Object.assign may have changed it)
-        state.activeNoteId = localById.has(localActiveNoteId) ? localActiveNoteId : state.notes[0]?.id;
-
-        // Merge gist metadata into local notes (update gistId/gistFilename/title from remote)
-        const remoteById = new Map(gistNotesMeta.map(n => [n.id, n]));
-        for (const note of state.notes) {
-          const remote = remoteById.get(note.id);
-          if (remote) {
-            if (remote.gistId) note.gistId = remote.gistId;
-            if (remote.gistFilename) note.gistFilename = remote.gistFilename;
-          }
-        }
-        // Add notes that exist on remote but not locally (created on another device)
-        for (const remote of gistNotesMeta) {
-          if (!localById.has(remote.id)) {
-            state.notes.push({ ...remote, content: '' });
-          }
-        }
-        if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
-          state.activeNoteId = state.notes[0]?.id;
-        }
-
-        // Fetch content from per-note gists only when the note is new (from another device)
-        // or has no local content. Local edits are always preferred to avoid overwriting
-        // unsaved changes when the user refreshes before the 3-second push debounce fires.
-        for (const note of state.notes) {
-          if (!note.gistId) continue;
-          const hasLocalContent = localById.has(note.id) && localById.get(note.id).content;
-          if (hasLocalContent) continue;
-          try {
-            const r = await fetch(`https://api.github.com/gists/${note.gistId}`, { headers: auth });
-            const res = await r.json();
-            const file = res.files?.[note.gistFilename] || res.files?.[noteGistFilename(note)] || (res.files && Object.values(res.files)[0]);
-            if (file?.content != null) note.content = file.content;
-          } catch {}
-        }
-
-        saveState();
-        loadNotes();
-      
-      lastPullTime = Date.now();
-      const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setSyncStatus(`Synced ${t}`);
-    } else {
-      await pushSync();
+    // 1. List all .md files in the Lumina folder
+    let vaultFiles;
+    try { vaultFiles = await obsidianList(); } catch (err) {
+      // Folder doesn't exist yet — do a first push
+      if (err.message.includes('404')) { await pushSync(); return; }
+      throw err;
     }
+
+    // Exclude system files (Quick Links.md, Saved Links.md) from note import
+    const SYSTEM_FILES = new Set([`${OBSIDIAN_FOLDER}/Quick Links.md`, `${OBSIDIAN_FOLDER}/Saved Links.md`]);
+    const mdFiles = vaultFiles
+      .filter(f => f.endsWith('.md') && !f.endsWith('/.md'))
+      .map(f => f.startsWith(OBSIDIAN_FOLDER + '/') ? f : `${OBSIDIAN_FOLDER}/${f}`)
+      .filter(f => !SYSTEM_FILES.has(f));
+
+    // 2. Fetch settings file if it exists (for non-note state: links, wallpapers, etc.)
+    let settingsJson = null;
+    const settingsResp = await obsidianGet(OBSIDIAN_SETTINGS_FILE);
+    if (settingsResp.ok) {
+      settingsJson = await settingsResp.text();
+      await applySyncPayload(settingsJson, { skipNoteContent: true, skipSave: true });
+    } else if (settingsResp.status !== 404) {
+      throw new Error(`Pull settings: ${settingsResp.status}`);
+    }
+
+    // 3. Build maps of what we know locally
+    const localNotes = (state.notes || []).map(n => ({ ...n }));
+    const localByPath = new Map(localNotes.filter(n => n.vaultPath).map(n => [n.vaultPath, n]));
+    const localById = new Map(localNotes.map(n => [n.id, n]));
+    const localActiveNoteId = state.activeNoteId;
+
+    // Parse remote note metadata for id ↔ path mapping
+    let remoteNotesMeta = [];
+    if (settingsJson) {
+      try { remoteNotesMeta = JSON.parse(settingsJson)?.state?.notes || []; } catch {}
+    }
+    const remoteMetaByPath = new Map(remoteNotesMeta.filter(n => n.vaultPath).map(n => [n.vaultPath, n]));
+
+    // 4. Merge: vault files are source of truth
+    const mergedNotes = [];
+    const processedLocalIds = new Set();
+
+    for (const filePath of mdFiles) {
+      // Fetch content from vault
+      let content = '';
+      try {
+        const r = await obsidianGet(filePath);
+        if (r.ok) content = await r.text();
+      } catch {}
+
+      // Try to match to an existing local note by vaultPath
+      const localNote = localByPath.get(filePath);
+      // Or match via remote metadata (id mapping)
+      const remoteMeta = remoteMetaByPath.get(filePath);
+      const metaNote = remoteMeta ? localById.get(remoteMeta.id) : null;
+      const matched = localNote || metaNote;
+
+      if (matched) {
+        // Existing note — update content from vault
+        matched.content = content;
+        matched.vaultPath = filePath;
+        if (remoteMeta) {
+          matched.id = remoteMeta.id;
+          matched.title = remoteMeta.title || matched.title;
+        }
+        mergedNotes.push(matched);
+        processedLocalIds.add(matched.id);
+      } else {
+        // New file created in Obsidian — import it
+        const filename = filePath.split('/').pop().replace(/\.md$/, '');
+        const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        mergedNotes.push({
+          id,
+          title: filename,
+          content,
+          vaultPath: filePath,
+        });
+      }
+    }
+
+    // 5. Keep local-only notes that aren't in the vault yet (never pushed)
+    for (const note of localNotes) {
+      if (!processedLocalIds.has(note.id) && !note.vaultPath) {
+        mergedNotes.push(note);
+      }
+      // Notes with a vaultPath that no longer exists in vault = deleted in Obsidian → drop them
+    }
+
+    state.notes = mergedNotes.length ? mergedNotes : [{ id: 'note-1', title: 'Note 1', content: '' }];
+
+    // Restore active note if still valid
+    if (state.notes.find(n => n.id === localActiveNoteId)) {
+      state.activeNoteId = localActiveNoteId;
+    } else {
+      state.activeNoteId = state.notes[0].id;
+    }
+
+    saveState();
+    loadNotes();
+
+    // 6. Push back so settings file reflects any new imports
+    await pushSync();
+
+    lastPullTime = Date.now();
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus(`Synced ${t}`);
+    setObsidianStatus('connected', `Synced with Obsidian — ${t}`);
   } catch (err) {
     setSyncStatus(`Sync error: ${err.message}`);
     showToast(`⚠ ${err.message}`);
+    setObsidianStatus('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
   }
 }
 
 function schedulePush() {
-  if (!getSyncPat()) return;
+  if (!isSyncConfigured()) return;
   clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(pushSync, 3000);
 }
 
 function flushSyncNow() {
-  if (!getSyncPat()) return;
+  if (!isSyncConfigured()) return;
   clearTimeout(syncDebounceTimer);
   syncDebounceTimer = null;
   pushSync();
 }
 
-function updateSyncGistLink() {
-  const linkEl = document.getElementById('sync-gist-link');
-  if (!linkEl) return;
-  const url = getSyncGistUrl();
-  if (url) {
-    linkEl.href = url;
-    linkEl.target = '_blank';
-    linkEl.rel = 'noopener';
-    linkEl.style.display = '';
-  } else {
-    linkEl.style.display = 'none';
-  }
-}
-
 function initSync() {
-  const patInput = document.getElementById('sync-pat');
-  patInput.value = getSyncPat();
-  patInput.addEventListener('change', () => {
-    const val = patInput.value.trim();
-    localStorage.setItem('lumina_sync_pat', val);
-    setSyncStatus(val ? 'Token saved — click Sync to pull' : '');
+  const urlInput = document.getElementById('sync-api-url');
+  const keyInput = document.getElementById('sync-api-key');
+  urlInput.value = getSyncApiUrl();
+  keyInput.value = getSyncApiKey();
+  urlInput.addEventListener('change', () => {
+    localStorage.setItem('lumina_sync_api_url', urlInput.value.trim());
+    setSyncStatus(isSyncConfigured() ? 'Settings saved — click Sync' : '');
+    checkObsidianConnection();
+  });
+  keyInput.addEventListener('change', () => {
+    localStorage.setItem('lumina_sync_api_key', keyInput.value.trim());
+    setSyncStatus(isSyncConfigured() ? 'Settings saved — click Sync' : '');
+    checkObsidianConnection();
   });
 
-  // Pull only happens when the user clicks Sync Now — never automatically on load
   document.getElementById('sync-now-btn').addEventListener('click', () => {
-    if (!getSyncPat()) { setSyncStatus('Add a token first'); return; }
+    if (!isSyncConfigured()) { setSyncStatus('Enter API URL and key first'); return; }
     clearTimeout(syncDebounceTimer);
     syncDebounceTimer = null;
     pullSync();
   });
-  updateSyncGistLink();
-  if (getSyncPat()) setSyncStatus('Ready — click Sync to pull');
-  // Push on tab close / navigate away so no edits are lost
+  if (isSyncConfigured()) setSyncStatus('Ready — click Sync to pull');
+  // Pull any edits made in Obsidian while Lumina was in the background, so
+  // the next push (Cmd+S, tab close, scheduled) doesn't clobber them. We
+  // listen on both visibilitychange (tab switches, minimize) and window
+  // focus/blur (app switches via Cmd+Tab, where the tab stays "visible" but
+  // the window loses focus) — they're complementary on macOS.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSyncNow();
+    else if (document.visibilityState === 'visible') checkVaultChanges();
   });
+  window.addEventListener('blur', () => { flushSyncNow(); });
+  window.addEventListener('focus', () => { checkVaultChanges(); });
   window.addEventListener('pagehide', () => { flushSyncNow(); });
+  checkObsidianConnection();
+  // Check for vault changes on load and every hour
+  checkVaultChanges();
+  if (vaultCheckInterval) clearInterval(vaultCheckInterval);
+  vaultCheckInterval = setInterval(checkVaultChanges, 60 * 60 * 1000);
+}
+
+async function checkVaultChanges() {
+  if (!isSyncConfigured()) return;
+  if (vaultCheckInProgress || syncInProgress) return;
+  vaultCheckInProgress = true;
+  try {
+    const notes = state.notes || [];
+    if (!notes.length) return;
+    const snapshots = getSyncSnapshots();
+    const autoMerged = [];
+    const conflicts = [];
+
+    for (const note of notes) {
+      const path = note.vaultPath || noteVaultPath(note);
+      let vaultContent;
+      try {
+        const r = await obsidianGet(path);
+        if (!r.ok) continue;
+        vaultContent = (await r.text()).trim();
+      } catch { continue; }
+
+      const localContent = (note.content ?? '').toString().trim();
+      const snapshotContent = (snapshots[note.id] ?? '').trim();
+
+      // No difference — skip
+      if (vaultContent === localContent) continue;
+
+      const vaultChanged = vaultContent !== snapshotContent;
+      const localChanged = localContent !== snapshotContent;
+
+      if (vaultChanged && !localChanged) {
+        // Only vault changed — safe to auto-merge into local
+        note.content = vaultContent;
+        updateSyncSnapshot(note.id, vaultContent);
+        autoMerged.push(note.title);
+      } else if (!vaultChanged && localChanged) {
+        // Only local changed — will push on next sync, nothing to do
+      } else if (vaultChanged && localChanged) {
+        // Both sides changed — conflict
+        conflicts.push({ note, vaultContent });
+      }
+    }
+
+    if (autoMerged.length) {
+      saveState({ skipSchedule: true });
+      loadNotes();
+      const names = autoMerged.length <= 3 ? autoMerged.join(', ') : `${autoMerged.length} notes`;
+      setObsidianStatus('connected', `Auto-merged: ${names}`);
+    }
+
+    if (conflicts.length) {
+      showConflictBanner(conflicts);
+    }
+  } catch {} finally {
+    vaultCheckInProgress = false;
+  }
+}
+
+function showConflictBanner(conflicts) {
+  let banner = document.getElementById('vault-update-banner');
+  if (banner) banner.remove();
+  banner = document.createElement('div');
+  banner.id = 'vault-update-banner';
+
+  const label = conflicts.length === 1
+    ? `"${conflicts[0].note.title}" changed in both Obsidian and Lumina`
+    : `${conflicts.length} notes changed in both Obsidian and Lumina`;
+
+  banner.innerHTML = `
+    <span>${label}</span>
+    <div style="display:flex;gap:6px;margin-top:8px;justify-content:center;">
+      <button id="vault-update-obsidian">Use Obsidian</button>
+      <button id="vault-update-local">Use Local</button>
+      <button id="vault-update-dismiss">Dismiss</button>
+    </div>
+  `;
+  document.body.appendChild(banner);
+  requestAnimationFrame(() => banner.classList.add('show'));
+
+  const dismiss = () => {
+    banner.classList.remove('show');
+    setTimeout(() => banner.remove(), 300);
+  };
+
+  document.getElementById('vault-update-obsidian').addEventListener('click', () => {
+    for (const { note, vaultContent } of conflicts) {
+      note.content = vaultContent;
+      updateSyncSnapshot(note.id, vaultContent);
+    }
+    saveState({ skipSchedule: true });
+    loadNotes();
+    // Push so vault gets the resolved state
+    schedulePush();
+    setObsidianStatus('connected', `Resolved ${conflicts.length} conflict(s) — used Obsidian`);
+    dismiss();
+  });
+
+  document.getElementById('vault-update-local').addEventListener('click', () => {
+    for (const { note } of conflicts) {
+      updateSyncSnapshot(note.id, (note.content ?? '').toString());
+    }
+    // Push local content to vault
+    schedulePush();
+    setObsidianStatus('connected', `Resolved ${conflicts.length} conflict(s) — used local`);
+    dismiss();
+  });
+
+  document.getElementById('vault-update-dismiss').addEventListener('click', dismiss);
+}
+
+async function checkObsidianConnection() {
+  if (!isSyncConfigured()) {
+    setObsidianStatus('disconnected', 'Obsidian sync not configured — add API URL and key in Settings');
+    return;
+  }
+  try {
+    // Use an authenticated endpoint to truly validate the key
+    const resp = await fetch(`${getSyncApiUrl()}/vault/`, {
+      headers: { Authorization: `Bearer ${getSyncApiKey()}`, Accept: 'application/json' },
+    });
+    if (resp.ok) {
+      setObsidianStatus('connected', 'Connected to Obsidian');
+    } else {
+      setObsidianStatus('disconnected', `Cannot reach Obsidian — ${resp.status} error`);
+    }
+  } catch {
+    setObsidianStatus('disconnected', 'Cannot reach Obsidian — make sure it is open with Local REST API');
+  }
+}
+
+// ─── SETUP WIZARD ───────────────────────────────
+function isFirstInstall() {
+  return !localStorage.getItem('lumina_setup_done');
+}
+
+function showSetupOverlay() {
+  const overlay = document.getElementById('setup-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  goToSetupStep('welcome');
+}
+
+function hideSetupOverlay() {
+  const overlay = document.getElementById('setup-overlay');
+  if (overlay) overlay.style.display = 'none';
+  localStorage.setItem('lumina_setup_done', '1');
+}
+
+function goToSetupStep(stepName) {
+  const steps = document.querySelectorAll('.setup-step');
+  steps.forEach(s => {
+    s.classList.toggle('active', s.dataset.step === stepName);
+  });
+}
+
+function initSetupWizard() {
+  const connectBtn = document.getElementById('setup-connect-btn');
+  const skipBtn = document.getElementById('setup-skip-btn');
+  const testBtn = document.getElementById('setup-test-btn');
+  const backBtn = document.getElementById('setup-back-btn');
+  const importBtn = document.getElementById('setup-import-btn');
+  const freshBtn = document.getElementById('setup-fresh-btn');
+  const doneBtn = document.getElementById('setup-done-btn');
+
+  if (!connectBtn) return; // no setup overlay in DOM
+
+  connectBtn.addEventListener('click', () => goToSetupStep('configure'));
+  skipBtn.addEventListener('click', () => hideSetupOverlay());
+  backBtn.addEventListener('click', () => goToSetupStep('welcome'));
+
+  testBtn.addEventListener('click', async () => {
+    const urlInput = document.getElementById('setup-api-url');
+    const keyInput = document.getElementById('setup-api-key');
+    const statusEl = document.getElementById('setup-test-status');
+    const url = (urlInput.value || '').trim().replace(/\/+$/, '');
+    const key = (keyInput.value || '').trim();
+    if (!url || !key) {
+      statusEl.textContent = 'Please enter both URL and API key';
+      statusEl.className = 'setup-test-status error';
+      return;
+    }
+    statusEl.textContent = 'Testing connection…';
+    statusEl.className = 'setup-test-status testing';
+    try {
+      const resp = await fetch(url + '/', {
+        headers: { Authorization: 'Bearer ' + key },
+        mode: 'cors',
+      });
+      if (resp.ok) {
+        // Save credentials
+        localStorage.setItem('lumina_sync_api_url', url);
+        localStorage.setItem('lumina_sync_api_key', key);
+        // Update settings inputs too
+        const settingsUrl = document.getElementById('sync-api-url');
+        const settingsKey = document.getElementById('sync-api-key');
+        if (settingsUrl) settingsUrl.value = url;
+        if (settingsKey) settingsKey.value = key;
+        statusEl.textContent = 'Connected!';
+        statusEl.className = 'setup-test-status success';
+        setTimeout(() => goToSetupStep('import'), 600);
+      } else {
+        statusEl.textContent = `Connection failed — HTTP ${resp.status}`;
+        statusEl.className = 'setup-test-status error';
+      }
+    } catch {
+      statusEl.textContent = 'Cannot reach Obsidian — check URL and that Obsidian is open';
+      statusEl.className = 'setup-test-status error';
+    }
+  });
+
+  importBtn.addEventListener('click', async () => {
+    const desc = document.getElementById('setup-done-desc');
+    try {
+      await pullSync();
+      if (desc) desc.textContent = 'Your notes and settings have been imported from Obsidian. Enjoy your new tab!';
+    } catch {
+      if (desc) desc.textContent = 'Import had some issues, but Lumina is ready. You can sync again from Settings.';
+    }
+    goToSetupStep('done');
+  });
+
+  freshBtn.addEventListener('click', () => {
+    const desc = document.getElementById('setup-done-desc');
+    if (desc) desc.textContent = 'Lumina is connected to Obsidian and ready to sync. Enjoy your new tab!';
+    goToSetupStep('done');
+  });
+
+  doneBtn.addEventListener('click', () => hideSetupOverlay());
+}
+
+// ─── SETTINGS REVISION ARCHIVE ──────────────────
+const SETTINGS_ARCHIVE_KEY = 'lumina_settings_archive';
+const MAX_SETTINGS_REVISIONS = 30;
+
+function getSettingsArchive() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_ARCHIVE_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function archiveCurrentSettings() {
+  const archive = getSettingsArchive();
+  const snapshot = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    timestamp: Date.now(),
+    data: JSON.parse(JSON.stringify(state)),
+  };
+  archive.unshift(snapshot);
+  if (archive.length > MAX_SETTINGS_REVISIONS) archive.length = MAX_SETTINGS_REVISIONS;
+  localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive));
+}
+
+function restoreSettingsRevision(revisionId) {
+  const archive = getSettingsArchive();
+  const rev = archive.find(r => r.id === revisionId);
+  if (!rev || !rev.data) return false;
+  state = rev.data;
+  saveState({ skipSchedule: true });
+  return true;
+}
+
+function renderSettingsArchive() {
+  const container = document.getElementById('settings-archive-list');
+  if (!container) return;
+  const archive = getSettingsArchive();
+  if (!archive.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No saved revisions yet. Settings are archived automatically when changes are made.</p>';
+    return;
+  }
+  container.innerHTML = archive.map(rev => {
+    const d = new Date(rev.timestamp);
+    const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const noteCount = Array.isArray(rev.data.notes) ? rev.data.notes.length : 0;
+    const linkCount = Array.isArray(rev.data.links) ? rev.data.links.length : 0;
+    return `<div class="settings-rev-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div>
+        <div style="font-size:0.85rem;color:var(--text);">${dateStr} at ${timeStr}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);">${noteCount} notes · ${linkCount} links · ${rev.data.themes?.join(', ') || 'default'}</div>
+      </div>
+      <button class="settings-rev-restore" data-rev-id="${rev.id}" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:0.8rem;cursor:pointer;">Restore</button>
+    </div>`;
+  }).join('');
+  container.querySelectorAll('.settings-rev-restore').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.revId;
+      if (confirm('Restore this settings revision? Your current settings will be replaced.')) {
+        if (restoreSettingsRevision(id)) {
+          location.reload();
+        }
+      }
+    });
+  });
+}
+
+function fetchPublicIP() {
+  fetch('https://api.ipify.org?format=json')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('public-ip');
+      if (el && data.ip) el.textContent = data.ip;
+    })
+    .catch(() => {});
 }
 
 function init() {
@@ -3485,9 +3754,11 @@ function init() {
   syncSettings();
   applyVisibility();
   applyPanelTheme(state.panelTheme || 'dark');
+  applySettingsTheme(state.settingsTheme || 'dark');
 
   applyEngine(state.searchEngine || 'claude');
   fetchWeather();
+  fetchPublicIP();
 
   // Show badge if bookmark sync is configured
   if (state.bmFolderId) document.getElementById('bm-sync-badge').style.display = '';
@@ -3507,6 +3778,13 @@ function init() {
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
+
+  // Setup wizard for first install
+  initSetupWizard();
+  if (isFirstInstall()) showSetupOverlay();
+
+  // Settings archive
+  renderSettingsArchive();
 }
 
 window.addEventListener('resize', () => { resizeCanvas(); startBg(); });
