@@ -12,7 +12,11 @@ Main-panel quick links is now a single flat list. Removed + Section button, inli
 Moved #export-btn out of the main-panel quick-links header and into the side-panel Bookmarks #bm-tree-toolbar (next to the refresh button). Resized to 28×28 icon-only to match the toolbar's other controls; handler untouched since it's bound by id. Main-panel header now contains only the icon-view toggle and Add Link — commit: e70f7c7 2026.04.15 15:01:50
 ```
 
-- [ ] FEAT: render Quick Links inside the side-panel Bookmarks tab (above the chrome bookmarks tree)
+- [x] FEAT: render Quick Links inside the side-panel Bookmarks tab (above the chrome bookmarks tree)
+
+```FIX:
+Added a Quick Links section inside the side-panel Bookmarks tab, above the chrome bookmarks tree. Shared scroll container wraps both lists. Each quick link renders as a `.bm-row` (favicon + label + hover edit/delete) matching the tree's visual language; click navigates, middle-click opens new tab. Header shows a compact + button that reuses openAddModal, edit/delete reuse openEditModal/deleteLink. renderLinks() now also calls renderSidePanelQuickLinks() so main-panel and side-panel stay in sync on every state change. SVGs built via new svgFromString helper (DOMParser text/html) to avoid innerHTML on new code — commit: a592864 2026.04.15 15:05:01
+```
 
 - [ ] FEAT: in side-panel Bookmarks tab, add controls to create, rename, and remove chrome bookmark folders (replacing the old main-panel section add/rename/remove controls)
 
