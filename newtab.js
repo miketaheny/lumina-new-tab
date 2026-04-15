@@ -3322,10 +3322,24 @@ function markdownToAsanaHtml(md) {
   const lines = src.split(/\r?\n/);
   const out = [];
   let listType = null; // 'ul' | 'ol'
+  let inFence = false;
+  let fenceBuf = [];
   const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
+  const closeFence = () => {
+    if (!inFence) return;
+    out.push('<pre><code>' + escapeHtml(fenceBuf.join('\n')) + '</code></pre>');
+    fenceBuf = [];
+    inFence = false;
+  };
   for (const raw of lines) {
     const line = raw.trimEnd();
+    if (/^```/.test(line.trim())) {
+      if (inFence) { closeFence(); } else { closeList(); inFence = true; }
+      continue;
+    }
+    if (inFence) { fenceBuf.push(raw); continue; }
     if (!line.trim()) { closeList(); continue; }
+    if (/^(---+|\*\*\*+|___+)\s*$/.test(line.trim())) { closeList(); out.push('<hr/>'); continue; }
     const h = line.match(/^(#{1,2})\s+(.*)$/);
     if (h) { closeList(); out.push(`<${h[1].length === 1 ? 'h1' : 'h2'}>${renderInline(h[2])}</${h[1].length === 1 ? 'h1' : 'h2'}>`); continue; }
     const task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
@@ -3351,6 +3365,7 @@ function markdownToAsanaHtml(md) {
     closeList();
     out.push(renderInline(line));
   }
+  closeFence();
   closeList();
   return `<body>${out.join('')}</body>`;
 }
@@ -3372,7 +3387,12 @@ function asanaHtmlToMarkdown(html) {
         case 'strong': case 'b': md += `**${inner}**`; break;
         case 'em': case 'i': md += `*${inner}*`; break;
         case 's': case 'strike': case 'del': md += `~~${inner}~~`; break;
-        case 'code': md += `\`${inner}\``; break;
+        case 'code':
+          if (child.parentElement?.tagName?.toLowerCase() === 'pre') { md += inner; }
+          else { md += `\`${inner}\``; }
+          break;
+        case 'pre': md += `\n\`\`\`\n${inner}\n\`\`\`\n`; break;
+        case 'u': md += `<u>${inner}</u>`; break;
         case 'a': md += `[${inner}](${child.getAttribute('href') || ''})`; break;
         case 'ul': md += '\n' + Array.from(child.children).map(li => `- ${walk(li)}`).join('\n') + '\n'; break;
         case 'ol': md += '\n' + Array.from(child.children).map((li, i) => `${i + 1}. ${walk(li)}`).join('\n') + '\n'; break;
