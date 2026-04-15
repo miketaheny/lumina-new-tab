@@ -1,6 +1,6 @@
 # Lumina — New Tab Page
 
-A Chrome extension that replaces your new tab page with an AI-powered workspace: animated backgrounds, wallpapers, search, quick links, rich-text notes, saved reading list, live weather, daily focus, customizable greeting, and more.
+A Chrome extension that replaces your new tab page with an AI-powered workspace: animated backgrounds, wallpapers, search, quick links, rich-text notes, Kindling reading list, a full bookmarks tree, live weather, daily focus, customizable greeting, and more.
 
 > **Feature documentation** is built into the app — click the **?** button in the top bar for the full user guide.
 

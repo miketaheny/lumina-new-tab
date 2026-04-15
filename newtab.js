@@ -2889,13 +2889,38 @@ function applySavedFaviconBg(val) {
   document.querySelectorAll('.fav-bg-btn').forEach(b => b.classList.toggle('active', b.dataset.bg === val));
 }
 
+let savedStatusFilter = 'all'; // 'all' | 'unread' | 'read'
+
+function makeStatusChip(label, value) {
+  const chip = document.createElement('button');
+  chip.className = 'saved-filter-chip';
+  chip.textContent = label;
+  if (savedStatusFilter === value) {
+    chip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
+  }
+  chip.addEventListener('click', () => {
+    savedStatusFilter = value;
+    renderSavedFilters();
+    renderSavedList();
+  });
+  return chip;
+}
+
 function renderSavedFilters() {
   const container = document.getElementById('saved-filters');
   container.innerHTML = '';
 
+  container.appendChild(makeStatusChip('All', 'all'));
+  container.appendChild(makeStatusChip('Unread', 'unread'));
+  container.appendChild(makeStatusChip('Read', 'read'));
+
+  const sep = document.createElement('span');
+  sep.style.cssText = 'width:1px;height:14px;background:var(--glass-border);margin:0 2px;align-self:center;flex-shrink:0;';
+  container.appendChild(sep);
+
   const allChip = document.createElement('button');
   allChip.className = 'saved-filter-chip';
-  allChip.textContent = 'All';
+  allChip.textContent = 'All tags';
   if (savedFilter === 'all') {
     allChip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
   }
@@ -2929,12 +2954,19 @@ function renderSavedList() {
   if (savedFilter !== 'all') {
     links = links.filter(l => l.tags && l.tags.includes(savedFilter));
   }
+  if (savedStatusFilter === 'unread') {
+    links = links.filter(l => !l.readAt);
+  } else if (savedStatusFilter === 'read') {
+    links = links.filter(l => !!l.readAt);
+  }
 
   if (!links.length) {
     const empty = document.createElement('div');
     empty.id = 'saved-empty';
-    if (savedFilter === 'all') {
-      empty.innerHTML = 'No saved links yet.<br><small style="opacity:0.6">Use the bookmark button in any tab to save from anywhere.</small>';
+    if (savedFilter === 'all' && savedStatusFilter === 'all') {
+      empty.innerHTML = "Kindling is empty.<br><small style=\"opacity:0.6\">Use the bookmark button in any tab to stash from anywhere.</small>";
+    } else if (savedStatusFilter !== 'all' && savedFilter === 'all') {
+      empty.innerHTML = `Nothing ${escHtml(savedStatusFilter)} yet.`;
     } else {
       empty.innerHTML = `No links tagged <strong>${escHtml(savedFilter)}</strong>.`;
     }
@@ -2948,7 +2980,7 @@ function renderSavedList() {
 
   sorted.forEach((link, idx) => {
     const item = document.createElement('a');
-    item.className = 'saved-item';
+    item.className = 'saved-item' + (link.readAt ? ' is-read' : '');
     item.href = link.url;
     item.target = '_blank';
     item.rel = 'noopener';
@@ -2969,6 +3001,9 @@ function renderSavedList() {
         ${tagsHtml ? `<div class="saved-item-tags">${tagsHtml}</div>` : ''}
       </div>
       <div class="saved-item-actions">
+        <button class="saved-item-read" title="${link.readAt ? 'Mark unread' : 'Mark read'}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="${link.readAt ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </button>
         <button class="saved-item-edit" title="Edit tags">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         </button>
@@ -2981,6 +3016,15 @@ function renderSavedList() {
       </div>
     `;
 
+    item.querySelector('.saved-item-read').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = savedData.links.find(l => l.id === link.id);
+      if (!target) return;
+      target.readAt = target.readAt ? null : Date.now();
+      persistSavedLinks();
+      renderSavedList();
+    });
     item.querySelector('.saved-item-edit').addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -3476,9 +3520,9 @@ function buildQuickLinksMarkdown() {
 function buildSavedLinksMarkdown() {
   const links = savedData?.links || [];
   const tags = savedData?.tags || [];
-  if (!links.length) return '# Saved Links\n\n_No saved links_\n';
+  if (!links.length) return '# Kindling\n\n_Empty_\n';
 
-  let md = '# Saved Links\n\n';
+  let md = '# Kindling\n\n';
 
   // Group by tags
   const tagMap = new Map();
@@ -3497,7 +3541,7 @@ function buildSavedLinksMarkdown() {
     if (!items?.length) continue;
     md += `## ${tag.name}\n\n`;
     for (const link of items) {
-      md += `- [${link.title}](${link.url})\n`;
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
     }
     md += '\n';
   }
@@ -3507,7 +3551,7 @@ function buildSavedLinksMarkdown() {
     if (tags.find(t => t.name === tagName)) continue;
     md += `## ${tagName}\n\n`;
     for (const link of items) {
-      md += `- [${link.title}](${link.url})\n`;
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
     }
     md += '\n';
   }
@@ -3516,7 +3560,7 @@ function buildSavedLinksMarkdown() {
   if (untagged.length) {
     md += `## Untagged\n\n`;
     for (const link of untagged) {
-      md += `- [${link.title}](${link.url})\n`;
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
     }
     md += '\n';
   }

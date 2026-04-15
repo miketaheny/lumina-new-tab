@@ -24,6 +24,10 @@ Added Bookmarks tab between Notes and Saved Links with full chrome.bookmarks tre
 Removed zenquotes.io fetch button, CSS, handler, manifest host entry, and README row. Expanded DEFAULT_FOCUS_LINES to 10 original lines with core12/fret12/agency voice (strategy, rhythm, brand-as-repetition themes) — commit: aa42224 2026-04-15 00:00:00
 ```
 
-- [ ] REFACTOR: come up with a few ideas on how to expand the Saved Links feature, want it to be a true reading list type feature, call it something more creative
+- [x] REFACTOR: come up with a few ideas on how to expand the Saved Links feature, want it to be a true reading list type feature, call it something more creative
+
+```FIX:
+Renamed Saved Links → Kindling (reading list that's ready to ignite). Added per-item read/unread toggle (flame/check icon), Unread/Read/All status filter pills alongside tag filters, visual treatment for read items (muted + strikethrough), markdown export uses task-list checkboxes `- [x]`/`- [ ]`, updated notes button tooltip and help text. Other ideas considered but not shipped: per-item snooze-until, estimated reading time from URL, highlights/notes field, archive-after-N-days auto-sweep — commit: 5fe65b2 2026-04-15 00:00:00
+```
 
 - [ ] CHORE: make sure tip tap is updated to function and is compatible with Asana editor as much as possible
