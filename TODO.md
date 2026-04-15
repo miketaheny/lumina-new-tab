@@ -6,7 +6,11 @@
 Main-panel quick links is now a single flat list. Removed + Section button, inline section headers (rename/collapse/delete), section dropdown in add/edit modal, Bookmarks-sync button/badge, and the auto-sync-on-load trigger. renderLinks + buildQuickLinksMarkdown simplified; fromBookmark links filtered out of view. bm-modal/openBmModal/applyBmSync/qlSections left as dead code for the follow-up task that repurposes folder management in the side-panel Bookmarks tab — commit: 9c5f68e 2026.04.15 14:59:09
 ```
 
-- [ ] CHORE: move Export button from main-panel quick-links header into the side-panel Bookmarks tab
+- [x] CHORE: move Export button from main-panel quick-links header into the side-panel Bookmarks tab
+
+```FIX:
+Moved #export-btn out of the main-panel quick-links header and into the side-panel Bookmarks #bm-tree-toolbar (next to the refresh button). Resized to 28×28 icon-only to match the toolbar's other controls; handler untouched since it's bound by id. Main-panel header now contains only the icon-view toggle and Add Link — commit: e70f7c7 2026.04.15 15:01:50
+```
 
 - [ ] FEAT: render Quick Links inside the side-panel Bookmarks tab (above the chrome bookmarks tree)
 
