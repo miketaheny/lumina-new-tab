@@ -30,4 +30,8 @@ Removed zenquotes.io fetch button, CSS, handler, manifest host entry, and README
 Renamed Saved Links → Kindling (reading list that's ready to ignite). Added per-item read/unread toggle (flame/check icon), Unread/Read/All status filter pills alongside tag filters, visual treatment for read items (muted + strikethrough), markdown export uses task-list checkboxes `- [x]`/`- [ ]`, updated notes button tooltip and help text. Other ideas considered but not shipped: per-item snooze-until, estimated reading time from URL, highlights/notes field, archive-after-N-days auto-sweep — commit: 5fe65b2 2026-04-15 00:00:00
 ```
 
-- [ ] CHORE: make sure tip tap is updated to function and is compatible with Asana editor as much as possible
+- [x] CHORE: make sure tip tap is updated to function and is compatible with Asana editor as much as possible
+
+```FIX:
+Pinned tiptap caret range to ^2.27.2 (latest tested 2.x; 3.x deferred as breaking major). Expanded markdown↔Asana HTML converter: fenced code blocks round-trip to `<pre><code>`, horizontal rules (`---`/`***`/`___`) emit `<hr/>`, inline `<u>` passes through html→md. Build verified — commit: 1cfca6d 2026-04-15 00:00:00
+```
