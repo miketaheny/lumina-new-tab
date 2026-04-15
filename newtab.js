@@ -503,21 +503,13 @@ function renderLinks() {
 
   Array.from(grid.querySelectorAll('.ql-item, .ql-section-header, .ql-section-items')).forEach(el => el.remove());
 
-  const allSections = state.qlSections?.length ? state.qlSections : [{ id: 'default', label: 'Quick Links' }];
-  // Ensure stray links fall back to a valid section before filtering.
-  const firstSectionId = allSections[0].id;
-  state.links.forEach(l => {
-    if (!l.section || !allSections.find(s => s.id === l.section)) l.section = firstSectionId;
-  });
-  // Bookmark-synced sections live in the side-panel Bookmarks tab only.
-  const sections = allSections.filter(s => !s.fromBookmark);
   const iconMode = !!state.qlIconsOnly;
-  const showHeaders = sections.length > 1;
-
   grid.classList.toggle('icons-only', iconMode);
   document.getElementById('ql-icon-toggle').classList.toggle('on', iconMode);
 
-  const visibleLinks = state.links.filter(l => sections.find(s => s.id === l.section));
+  // Bookmark-synced links are managed from the side-panel Bookmarks tab, not
+  // the main-panel quick-links list.
+  const visibleLinks = (state.links || []).filter(l => !l.fromBookmark);
   if (!visibleLinks.length) {
     empty.style.display = 'block';
     return;
@@ -525,52 +517,12 @@ function renderLinks() {
   empty.style.display = 'none';
 
   let animIdx = 0;
-  sections.forEach(section => {
-    const sectionLinks = state.links.filter(l => l.section === section.id);
-    const isCollapsed = !!(state.qlCollapsed?.[section.id]);
-    if (showHeaders) {
-      const header = document.createElement('div');
-      header.className = 'ql-section-header';
-      header.dataset.sectionId = section.id;
-      header.innerHTML = `
-        <button class="ql-section-caret${isCollapsed ? '' : ' expanded'}" title="Toggle section">▶</button>
-        <input class="ql-section-label" value="${escHtml(section.label)}" spellcheck="false" />
-        <div class="ql-section-sep"></div>
-        <button class="ql-section-btn ql-section-del-btn" title="Delete section" ${sectionLinks.length ? 'disabled style="opacity:0.25;cursor:default"' : ''}>✕</button>
-      `;
-      const labelInput = header.querySelector('.ql-section-label');
-      labelInput.addEventListener('blur', () => {
-        const s = state.qlSections.find(s => s.id === section.id);
-        if (s) {
-          s.label = labelInput.value.trim() || section.label;
-          saveState();
-          if (s.fromBookmark && s.id.startsWith('bms-') && chrome?.bookmarks) {
-            chrome.bookmarks.update(s.id.slice(4), { title: s.label }).catch(() => {});
-          }
-        }
-      });
-      labelInput.addEventListener('keydown', e => { if (e.key === 'Enter') labelInput.blur(); });
-      header.querySelector('.ql-section-caret').addEventListener('click', () => {
-        if (!state.qlCollapsed) state.qlCollapsed = {};
-        state.qlCollapsed[section.id] = !state.qlCollapsed[section.id];
-        saveState(); renderLinks();
-      });
-      header.querySelector('.ql-section-del-btn').addEventListener('click', () => {
-        const hasLinks = state.links.some(l => l.section === section.id);
-        if (hasLinks) { showToast('Move or delete all links in this section first'); return; }
-        state.qlSections = state.qlSections.filter(s => s.id !== section.id);
-        saveState(); renderLinks();
-      });
-      grid.appendChild(header);
-    }
-
-    if (isCollapsed) return;
-
+  {
     const itemRow = document.createElement('div');
     itemRow.className = 'ql-section-items';
     grid.appendChild(itemRow);
 
-    sectionLinks.forEach(link => {
+    visibleLinks.forEach(link => {
       const item = document.createElement('a');
       item.className = 'ql-item' + (iconMode ? ' icon-only' : '');
       item.href = link.url;
@@ -625,7 +577,7 @@ function renderLinks() {
 
       itemRow.appendChild(item);
     });
-  });
+  }
 }
 
 // ─── ICON MODE FLOAT MENU ───────────────────────
@@ -744,24 +696,9 @@ function setupDrag(el) {
     const toIdx = state.links.findIndex(l => l.id === toId);
     if (fromIdx < 0 || toIdx < 0) return;
     const moved = state.links[fromIdx];
-    const targetSection = state.links[toIdx].section;
-    moved.section = targetSection;
     state.links.splice(fromIdx, 1);
     state.links.splice(toIdx, 0, moved);
     saveState(); renderLinks();
-
-    // Sync reorder/move to Chrome bookmarks
-    if (chrome?.bookmarks) {
-      const bmId = moved.bmId || (moved.fromBookmark && moved.id.startsWith('bm-') ? moved.id.slice(3) : null);
-      if (bmId) {
-        const targetFolderId = targetSection?.startsWith('bms-') ? targetSection.slice(4) : null;
-        if (targetFolderId) {
-          const sectionLinks = state.links.filter(l => l.section === targetSection);
-          const newIndex = sectionLinks.findIndex(l => l.id === moved.id);
-          chrome.bookmarks.move(bmId, { parentId: targetFolderId, index: newIndex }).catch(() => {});
-        }
-      }
-    }
   });
 }
 
@@ -769,19 +706,6 @@ function setupDrag(el) {
 document.getElementById('ql-icon-toggle').addEventListener('click', () => {
   state.qlIconsOnly = !state.qlIconsOnly;
   saveState(); renderLinks();
-});
-
-// ─── SECTION MANAGEMENT ──────────────────────────
-document.getElementById('ql-add-section-btn').addEventListener('click', () => {
-  if (!state.qlSections) state.qlSections = [{ id: 'default', label: 'Quick Links' }];
-  const id = 'ql-s-' + Date.now();
-  state.qlSections.push({ id, label: 'New Section' });
-  saveState(); renderLinks();
-  // Focus the new section label for immediate rename
-  setTimeout(() => {
-    const el = document.querySelector(`.ql-section-header[data-section-id="${id}"] .ql-section-label`);
-    if (el) { el.focus(); el.select(); }
-  }, 50);
 });
 
 // ─── ADD / EDIT MODAL ────────────────────────────
@@ -798,10 +722,6 @@ function openAddModal() {
   document.getElementById('modal-icon-picker').style.display = 'none';
   document.getElementById('modal-no-favicon').checked = false;
   setModalFaviconBg('white');
-  const secSelAdd = document.getElementById('modal-section');
-  secSelAdd.innerHTML = (state.qlSections || [{ id: 'default', label: 'Quick Links' }])
-    .map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`)
-    .join('');
   showModal();
 }
 
@@ -817,11 +737,6 @@ function openEditModal(id) {
   setModalIcon(link.icon || null);
   document.getElementById('modal-no-favicon').checked = !!link.noFavicon;
   setModalFaviconBg(link.faviconBg || 'white');
-  // populate section dropdown
-  const secSel = document.getElementById('modal-section');
-  secSel.innerHTML = (state.qlSections || [{ id: 'default', label: 'Quick Links' }])
-    .map(s => `<option value="${s.id}"${(link.section || 'default') === s.id ? ' selected' : ''}>${escHtml(s.label)}</option>`)
-    .join('');
   showModal();
 }
 
@@ -854,27 +769,16 @@ document.getElementById('modal-save').addEventListener('click', async () => {
 
   if (!label) label = getUrlLabel(url);
 
-  const section = document.getElementById('modal-section').value;
   const noFavicon = document.getElementById('modal-no-favicon').checked;
   if (editingId) {
     const link = state.links.find(l => l.id === editingId);
     if (link) {
-      link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null; link.section = section;
+      link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null;
       link.noFavicon = noFavicon || null; link.faviconBg = _modalFaviconBg !== 'white' ? _modalFaviconBg : null;
-      const chromeId = link.bmId || (link.fromBookmark && link.id.startsWith('bm-') ? link.id.slice(3) : null);
-      if (chromeId && chrome?.bookmarks) chrome.bookmarks.update(chromeId, { url, title: label }).catch(() => {});
     }
   } else {
-    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, section, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
+    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
     state.links.push(newLink);
-    if (state.bmFolderId && chrome?.bookmarks) {
-      const parentId = section.startsWith('bms-') ? section.slice(4) : state.bmFolderId;
-      chrome.bookmarks.create({ parentId, url, title: label }).then(bm => {
-        newLink.fromBookmark = true;
-        newLink.bmId = bm.id;
-        saveState();
-      }).catch(() => {});
-    }
   }
 
   saveState(); renderLinks(); hideModal();
@@ -2754,7 +2658,6 @@ document.getElementById('bm-folder-select').addEventListener('change', e => {
   loadBmPreview(e.target.value);
 });
 
-document.getElementById('bm-sync-btn').addEventListener('click', openBmModal);
 document.getElementById('bm-cancel').addEventListener('click', hideBmModal);
 document.getElementById('bm-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('bm-modal')) hideBmModal();
@@ -2774,7 +2677,6 @@ document.getElementById('bm-apply').addEventListener('click', async () => {
     const sectionNote = sectionCount > 1 ? ` across ${sectionCount} sections` : '';
     showToast(`✓ Synced ${linkCount} link${linkCount !== 1 ? 's' : ''}${sectionNote} from bookmarks`);
   }
-  document.getElementById('bm-sync-badge').style.display = '';
 });
 
 async function applyBmSync() {
@@ -3544,25 +3446,13 @@ async function handleNoteDeletion(asanaTaskGid) {
 }
 
 function buildQuickLinksMarkdown() {
-  const sections = state.qlSections || [{ id: 'default', label: 'Quick Links' }];
-  const links = state.links || [];
-  const grouped = new Map(sections.map(s => [s.id, []]));
-  for (const link of links) {
-    const bucket = grouped.get(link.section) || grouped.get('default') || [];
-    bucket.push(link);
-    if (!grouped.has(link.section)) grouped.set(link.section, bucket);
-  }
+  const links = (state.links || []).filter(l => !l.fromBookmark);
   let md = '# Quick Links\n\n';
-  for (const section of sections) {
-    const items = grouped.get(section.id) || [];
-    if (sections.length > 1) md += `## ${section.label}\n\n`;
-    if (!items.length) { md += '_No links_\n\n'; continue; }
-    for (const link of items) {
-      md += `- [${link.label}](${link.url})\n`;
-    }
-    md += '\n';
+  if (!links.length) return md + '_No links_\n';
+  for (const link of links) {
+    md += `- [${link.label}](${link.url})\n`;
   }
-  return md.trimEnd() + '\n';
+  return md;
 }
 
 function buildSavedLinksMarkdown() {
@@ -3976,12 +3866,6 @@ function init() {
   applyEngine(state.searchEngine || 'claude');
   fetchWeather();
   fetchPublicIP();
-
-  // Show badge if bookmark sync is configured
-  if (state.bmFolderId) document.getElementById('bm-sync-badge').style.display = '';
-
-  // Auto-sync bookmarks on open
-  if (state.bmAutoSync && state.bmFolderId) applyBmSync();
 
   // Restore sidebar states
   if (state.notesPanelOpen !== false) openNotesPanel();
