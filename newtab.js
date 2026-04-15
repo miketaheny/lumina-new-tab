@@ -1971,11 +1971,205 @@ function closeNotesPanel() {
 // Tab switching
 document.querySelectorAll('.notes-tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    const which = tab.dataset.tab;
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-    document.getElementById('notes-tab-content').classList.toggle('active', tab.dataset.tab === 'notes');
-    document.getElementById('saved-tab-content').classList.toggle('active', tab.dataset.tab === 'saved');
+    document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
+    document.getElementById('bookmarks-tab-content').classList.toggle('active', which === 'bookmarks');
+    document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
+    if (which === 'bookmarks') renderBookmarksTree();
   });
 });
+
+// ─── BOOKMARKS TREE ──────────────────────────────────────────────────────────
+const BM_COLLAPSED_KEY = 'lumina_bm_collapsed';
+let bmCollapsed = new Set(JSON.parse(localStorage.getItem(BM_COLLAPSED_KEY) || '[]'));
+function bmSaveCollapsed() {
+  localStorage.setItem(BM_COLLAPSED_KEY, JSON.stringify([...bmCollapsed]));
+}
+
+function bmChevronSvg() {
+  return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+}
+function bmFolderSvg() {
+  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+}
+function bmEditSvg() {
+  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+}
+function bmDeleteSvg() {
+  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+}
+
+function bmMakeFolderRow(node) {
+  const row = document.createElement('div');
+  row.className = 'bm-row';
+  const collapsed = bmCollapsed.has(node.id);
+  const hasChildren = (node.children || []).length > 0;
+  const chev = document.createElement('span');
+  chev.className = 'bm-chevron' + (collapsed ? ' collapsed' : '') + (hasChildren ? '' : ' empty');
+  chev.innerHTML = bmChevronSvg();
+  const icon = document.createElement('span');
+  icon.className = 'bm-icon';
+  icon.style.color = 'var(--text-muted)';
+  icon.innerHTML = bmFolderSvg();
+  const label = document.createElement('span');
+  label.className = 'bm-label bm-folder-label';
+  label.textContent = node.title || '(unnamed folder)';
+  row.append(chev, icon, label);
+  return { row, chev };
+}
+
+function bmMakeBookmarkRow(node) {
+  const row = document.createElement('div');
+  row.className = 'bm-row';
+  const chev = document.createElement('span');
+  chev.className = 'bm-chevron empty';
+  const icon = document.createElement('span');
+  icon.className = 'bm-icon';
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = getFaviconUrl(node.url) || '';
+  img.addEventListener('error', () => { img.style.display = 'none'; });
+  icon.appendChild(img);
+  const label = document.createElement('span');
+  label.className = 'bm-label';
+  label.textContent = node.title || node.url;
+  label.title = node.url;
+
+  const actions = document.createElement('span');
+  actions.className = 'bm-actions';
+  const editBtn = document.createElement('button');
+  editBtn.className = 'bm-act';
+  editBtn.title = 'Edit';
+  editBtn.innerHTML = bmEditSvg();
+  editBtn.addEventListener('click', e => { e.stopPropagation(); bmEditBookmark(node); });
+  const delBtn = document.createElement('button');
+  delBtn.className = 'bm-act';
+  delBtn.title = 'Delete';
+  delBtn.innerHTML = bmDeleteSvg();
+  delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteBookmark(node); });
+  actions.append(editBtn, delBtn);
+
+  row.append(chev, icon, label, actions);
+  row.addEventListener('click', () => { window.location.href = node.url; });
+  row.addEventListener('auxclick', e => {
+    if (e.button === 1) { e.preventDefault(); window.open(node.url, '_blank'); }
+  });
+  return row;
+}
+
+function bmBuildNode(node) {
+  if (node.url) return bmMakeBookmarkRow(node);
+  const wrap = document.createElement('div');
+  wrap.className = 'bm-node';
+  const { row, chev } = bmMakeFolderRow(node);
+  const kids = document.createElement('div');
+  kids.className = 'bm-children' + (bmCollapsed.has(node.id) ? ' collapsed' : '');
+  (node.children || []).forEach(child => kids.appendChild(bmBuildNode(child)));
+  row.addEventListener('click', () => {
+    const isCollapsed = kids.classList.toggle('collapsed');
+    chev.classList.toggle('collapsed', isCollapsed);
+    if (isCollapsed) bmCollapsed.add(node.id); else bmCollapsed.delete(node.id);
+    bmSaveCollapsed();
+  });
+  wrap.append(row, kids);
+  return wrap;
+}
+
+function bmFilterTree(node, query) {
+  if (node.url) {
+    const hay = ((node.title || '') + ' ' + node.url).toLowerCase();
+    return hay.includes(query) ? { ...node } : null;
+  }
+  const kids = (node.children || []).map(c => bmFilterTree(c, query)).filter(Boolean);
+  if (!kids.length) return null;
+  return { ...node, children: kids };
+}
+
+async function bmEditBookmark(node) {
+  const newTitle = prompt('Edit bookmark title:', node.title || '');
+  if (newTitle === null) return;
+  const newUrl = prompt('Edit bookmark URL:', node.url || '');
+  if (newUrl === null) return;
+  try {
+    await chrome.bookmarks.update(node.id, { title: newTitle, url: newUrl });
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] edit failed', e); }
+}
+
+async function bmDeleteBookmark(node) {
+  if (!confirm(`Delete "${node.title || node.url}"?`)) return;
+  try {
+    await chrome.bookmarks.remove(node.id);
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] delete failed', e); }
+}
+
+async function renderBookmarksTree() {
+  const host = document.getElementById('bm-tree');
+  if (!host) return;
+  if (!chrome?.bookmarks) {
+    host.innerHTML = '<div class="bm-empty">Bookmarks API not available.</div>';
+    return;
+  }
+  try {
+    const tree = await chrome.bookmarks.getTree();
+    const searchEl = document.getElementById('bm-tree-search');
+    const query = (searchEl?.value || '').trim().toLowerCase();
+    host.innerHTML = '';
+    const roots = tree[0]?.children || [];
+    const visible = query
+      ? roots.map(r => bmFilterTree(r, query)).filter(Boolean)
+      : roots;
+    if (!visible.length) {
+      host.innerHTML = '<div class="bm-empty">No bookmarks match.</div>';
+      return;
+    }
+    visible.forEach(root => {
+      const kids = (root.children || []);
+      if (!kids.length && !query) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'bm-node';
+      const { row, chev } = bmMakeFolderRow(root);
+      const kidsEl = document.createElement('div');
+      kidsEl.className = 'bm-children' + (bmCollapsed.has(root.id) ? ' collapsed' : '');
+      kids.forEach(child => kidsEl.appendChild(bmBuildNode(child)));
+      row.addEventListener('click', () => {
+        const isCollapsed = kidsEl.classList.toggle('collapsed');
+        chev.classList.toggle('collapsed', isCollapsed);
+        if (isCollapsed) bmCollapsed.add(root.id); else bmCollapsed.delete(root.id);
+        bmSaveCollapsed();
+      });
+      wrap.append(row, kidsEl);
+      host.appendChild(wrap);
+    });
+  } catch (e) {
+    host.innerHTML = '<div class="bm-empty">Error loading bookmarks.</div>';
+    console.error('[bookmarks] tree render failed', e);
+  }
+}
+
+{
+  const search = document.getElementById('bm-tree-search');
+  const refresh = document.getElementById('bm-tree-refresh');
+  let searchTimer;
+  search?.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderBookmarksTree, 150);
+  });
+  refresh?.addEventListener('click', () => renderBookmarksTree());
+  if (chrome?.bookmarks) {
+    const refreshIfOpen = () => {
+      if (document.getElementById('bookmarks-tab-content')?.classList.contains('active')) {
+        renderBookmarksTree();
+      }
+    };
+    chrome.bookmarks.onCreated?.addListener(refreshIfOpen);
+    chrome.bookmarks.onRemoved?.addListener(refreshIfOpen);
+    chrome.bookmarks.onChanged?.addListener(refreshIfOpen);
+    chrome.bookmarks.onMoved?.addListener(refreshIfOpen);
+  }
+}
 
 // ── Tiptap notes editor ──────────────────────────────────────────────────────────────
 const notesSource = document.getElementById('notes-source');
