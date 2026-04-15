@@ -18,7 +18,11 @@ Replaced Obsidian Local REST API sync with Asana private-project task sync (PAT 
 Added Bookmarks tab between Notes and Saved Links with full chrome.bookmarks tree (collapsible folders, per-node favicons, search, edit/delete actions, live refresh via chrome.bookmarks events, persisted collapse state in localStorage). Main page remains quick-links-only — commit: 999be66 2026-04-15 00:00:00
 ```
 
-- [ ] REFACTOR: replace zenqoutes integration with a fully manual daily focus section, come up with about 10 that you generate, inspirations should come from core12.com, fret12.com, and general digital marketing agency - be creative
+- [x] REFACTOR: replace zenqoutes integration with a fully manual daily focus section, come up with about 10 that you generate, inspirations should come from core12.com, fret12.com, and general digital marketing agency - be creative
+
+```FIX:
+Removed zenquotes.io fetch button, CSS, handler, manifest host entry, and README row. Expanded DEFAULT_FOCUS_LINES to 10 original lines with core12/fret12/agency voice (strategy, rhythm, brand-as-repetition themes) — commit: aa42224 2026-04-15 00:00:00
+```
 
 - [ ] REFACTOR: come up with a few ideas on how to expand the Saved Links feature, want it to be a true reading list type feature, call it something more creative
 

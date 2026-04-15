@@ -1272,12 +1272,16 @@ function buildThemeGrid() {
 
 // ─── FOCUS LINES ─────────────────────────────────
 const DEFAULT_FOCUS_LINES = [
-  'Deep work · Ship it · Stay present',
-  'Make it simple. Make it fast.',
-  'One thing at a time.',
-  'Build something that matters.',
-  'Think clearly. Act deliberately.',
-  'Progress over perfection.',
+  'Core values, loud signal — ship the thing that sounds like you.',
+  'Tune the message before you amp the budget.',
+  'Great brands riff — they don\'t read from a script.',
+  'Strategy is rhythm. Creative is melody. Ship the whole song.',
+  'Make the work the work. Promote it after.',
+  'A twelve-fret run: small moves, in order, no flash.',
+  'Be useful before you\'re clever. Be clever before you\'re loud.',
+  'If it doesn\'t move a number, it\'s a mood board.',
+  'Brand is what you repeat. Growth is what compounds.',
+  'Write like a person. Measure like an operator.',
 ];
 
 function getFocusLines() { return state.focusLines ?? DEFAULT_FOCUS_LINES; }
@@ -1336,23 +1340,6 @@ function setupFocusLineManagement() {
   document.getElementById('focus-reset-btn').addEventListener('click', () => {
     state.focusLines = null;
     saveState(); buildFocusLinesList(); applyFocusLine();
-  });
-  document.getElementById('focus-fetch-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('focus-fetch-btn');
-    btn.textContent = '…';
-    btn.disabled = true;
-    try {
-      const resp = await fetch('https://zenquotes.io/api/random');
-      const data = await resp.json();
-      if (data[0]?.q) {
-        const quote = data[0].q + (data[0].a ? ' — ' + data[0].a : '');
-        if (!state.focusLines) state.focusLines = [...getFocusLines()];
-        state.focusLines.push(quote);
-        saveState(); buildFocusLinesList(); applyFocusLine();
-      }
-    } catch {}
-    btn.textContent = '✨ Fetch from API';
-    btn.disabled = false;
   });
 }
 

@@ -17,7 +17,6 @@
     "https://api.open-meteo.com/*",
     "https://app.asana.com/*",
     "https://www.bing.com/*",
-    "https://zenquotes.io/*",
     "https://api.nasa.gov/*",
     "https://en.wikipedia.org/*"
   ],

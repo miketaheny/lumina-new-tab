@@ -108,7 +108,6 @@ Quick Links, Saved Links, and your settings JSON can be downloaded from **Settin
 | `www.bing.com` | Bing Daily wallpaper (only when selected) |
 | `api.nasa.gov` | NASA Astronomy Picture of the Day wallpaper (only when selected; uses `DEMO_KEY`) |
 | `en.wikipedia.org` | Wikimedia Picture of the Day wallpaper (only when selected) |
-| `zenquotes.io` | Fetch inspirational quotes for Daily Focus (only when triggered manually) |
 
 No personal data leaves your browser except through services you explicitly configure (Asana sync).
 
