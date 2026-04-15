@@ -18,7 +18,11 @@ Moved #export-btn out of the main-panel quick-links header and into the side-pan
 Added a Quick Links section inside the side-panel Bookmarks tab, above the chrome bookmarks tree. Shared scroll container wraps both lists. Each quick link renders as a `.bm-row` (favicon + label + hover edit/delete) matching the tree's visual language; click navigates, middle-click opens new tab. Header shows a compact + button that reuses openAddModal, edit/delete reuse openEditModal/deleteLink. renderLinks() now also calls renderSidePanelQuickLinks() so main-panel and side-panel stay in sync on every state change. SVGs built via new svgFromString helper (DOMParser text/html) to avoid innerHTML on new code — commit: a592864 2026.04.15 15:05:01
 ```
 
-- [ ] FEAT: in side-panel Bookmarks tab, add controls to create, rename, and remove chrome bookmark folders (replacing the old main-panel section add/rename/remove controls)
+- [x] FEAT: in side-panel Bookmarks tab, add controls to create, rename, and remove chrome bookmark folders (replacing the old main-panel section add/rename/remove controls)
+
+```FIX:
+Extended bmMakeFolderRow with hover actions: + (new subfolder), edit (rename), delete. Root nodes (ids 0/1/2/3 — Bookmarks Bar/Other/Mobile) only show the + button since Chrome disallows renaming/deleting them. New handlers: bmCreateFolder (prompt title, chrome.bookmarks.create), bmRenameFolder (prompt new title, chrome.bookmarks.update), bmDeleteFolder (confirm with child count, chrome.bookmarks.removeTree). After create, parent is auto-expanded so the new folder is visible — commit: 440b0a6 2026.04.15 15:06:06
+```
 
 - [x] FIX: can asana support checkboxes, if not can we make notes work where clicking the bullet adds strikethrough? and make sure the clear completed button works
 
