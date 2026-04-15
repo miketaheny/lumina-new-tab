@@ -3269,7 +3269,7 @@ async function asanaListProjects(workspaceGid) {
 }
 
 async function asanaCreatePrivateProject(workspaceGid, name) {
-  const body = JSON.stringify({ data: { name, workspace: workspaceGid, privacy_setting: 'private_to_me' } });
+  const body = JSON.stringify({ data: { name, workspace: workspaceGid, privacy_setting: 'private' } });
   const j = await asanaApi('/projects', { method: 'POST', body });
   return j?.data || null;
 }

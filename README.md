@@ -63,7 +63,7 @@ Safari requires explicit permission to override the new tab page. After enabling
 
 ## Sync via Asana (Personal Access Token)
 
-Notes sync as tasks in a private Asana project named **Lumina Notes**, created automatically the first time you connect. Each note is one task; note title = task name, note body = task `html_notes`. The project is created with `privacy_setting: 'private_to_me'` so no one else in your workspace can see it.
+Notes sync as tasks in a private Asana project named **Lumina Notes**, created automatically the first time you connect. Each note is one task; note title = task name, note body = task `html_notes`. The project is created with `privacy_setting: 'private'` so only you (the creator) can see it.
 
 ### Setup
 
