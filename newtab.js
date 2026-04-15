@@ -1990,8 +1990,66 @@ function bmMakeFolderRow(node) {
   const label = document.createElement('span');
   label.className = 'bm-label bm-folder-label';
   label.textContent = node.title || '(unnamed folder)';
-  row.append(chev, icon, label);
+
+  const actions = document.createElement('span');
+  actions.className = 'bm-actions';
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'bm-act';
+  addBtn.title = 'New subfolder';
+  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
+  addBtn.addEventListener('click', e => { e.stopPropagation(); bmCreateFolder(node.id); });
+  actions.appendChild(addBtn);
+
+  const isRoot = ['0', '1', '2', '3'].includes(node.id);
+  if (!isRoot) {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bm-act';
+    editBtn.title = 'Rename folder';
+    editBtn.appendChild(svgFromString(bmEditSvg()));
+    editBtn.addEventListener('click', e => { e.stopPropagation(); bmRenameFolder(node); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bm-act';
+    delBtn.title = 'Delete folder';
+    delBtn.appendChild(svgFromString(bmDeleteSvg()));
+    delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteFolder(node); });
+    actions.append(editBtn, delBtn);
+  }
+
+  row.append(chev, icon, label, actions);
   return { row, chev };
+}
+
+async function bmCreateFolder(parentId) {
+  const title = prompt('New folder name:');
+  if (!title) return;
+  try {
+    await chrome.bookmarks.create({ parentId, title });
+    if (parentId) bmCollapsed.delete(parentId);
+    bmSaveCollapsed();
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] create folder failed', e); }
+}
+
+async function bmRenameFolder(node) {
+  const title = prompt('Rename folder:', node.title || '');
+  if (title === null) return;
+  try {
+    await chrome.bookmarks.update(node.id, { title });
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] rename folder failed', e); }
+}
+
+async function bmDeleteFolder(node) {
+  const count = (node.children || []).length;
+  const msg = count
+    ? `Delete folder "${node.title}" and all ${count} items inside?`
+    : `Delete folder "${node.title}"?`;
+  if (!confirm(msg)) return;
+  try {
+    await chrome.bookmarks.removeTree(node.id);
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] delete folder failed', e); }
 }
 
 function bmMakeBookmarkRow(node) {
