@@ -578,6 +578,88 @@ function renderLinks() {
       itemRow.appendChild(item);
     });
   }
+
+  renderSidePanelQuickLinks();
+}
+
+function svgFromString(str) {
+  return new DOMParser().parseFromString(str, 'text/html').body.firstChild;
+}
+
+function renderSidePanelQuickLinks() {
+  const host = document.getElementById('bm-quicklinks');
+  if (!host) return;
+  const links = (state.links || []).filter(l => !l.fromBookmark);
+
+  host.replaceChildren();
+
+  const header = document.createElement('div');
+  header.className = 'bm-ql-header';
+  const title = document.createElement('span');
+  title.textContent = 'Quick Links';
+  const addBtn = document.createElement('button');
+  addBtn.className = 'bm-ql-add';
+  addBtn.title = 'Add link';
+  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
+  addBtn.addEventListener('click', () => openAddModal());
+  header.append(title, addBtn);
+  host.appendChild(header);
+
+  if (!links.length) {
+    const empty = document.createElement('div');
+    empty.className = 'bm-ql-empty';
+    empty.textContent = 'No quick links yet.';
+    host.appendChild(empty);
+    return;
+  }
+
+  links.forEach(link => {
+    const row = document.createElement('div');
+    row.className = 'bm-row';
+
+    const chev = document.createElement('span');
+    chev.className = 'bm-chevron empty';
+
+    const icon = document.createElement('span');
+    icon.className = 'bm-icon';
+    if (link.icon && HEROICONS[link.icon]) {
+      icon.style.color = 'var(--text-muted)';
+      icon.appendChild(svgFromString(heroiconSvg(link.icon, 14)));
+    } else {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = link.favicon || getFaviconUrl(link.url) || '';
+      img.addEventListener('error', () => { img.style.display = 'none'; });
+      icon.appendChild(img);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'bm-label';
+    label.textContent = link.label || getUrlLabel(link.url);
+    label.title = link.url;
+
+    const actions = document.createElement('span');
+    actions.className = 'bm-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bm-act';
+    editBtn.title = 'Edit';
+    editBtn.appendChild(svgFromString(bmEditSvg()));
+    editBtn.addEventListener('click', e => { e.stopPropagation(); openEditModal(link.id); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bm-act';
+    delBtn.title = 'Delete';
+    delBtn.appendChild(svgFromString(bmDeleteSvg()));
+    delBtn.addEventListener('click', e => { e.stopPropagation(); deleteLink(link.id); });
+    actions.append(editBtn, delBtn);
+
+    row.append(chev, icon, label, actions);
+    row.addEventListener('click', () => { window.location.href = link.url; });
+    row.addEventListener('auxclick', e => {
+      if (e.button === 1) { e.preventDefault(); window.open(link.url, '_blank'); }
+    });
+
+    host.appendChild(row);
+  });
 }
 
 // ─── ICON MODE FLOAT MENU ───────────────────────
