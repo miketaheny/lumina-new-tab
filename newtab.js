@@ -3373,6 +3373,19 @@ function markdownToAsanaHtml(md) {
 function asanaHtmlToMarkdown(html) {
   if (!html) return '';
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  // An <li> is treated as a checked task when its only significant child is a
+  // single <s> element — this is how markdownToAsanaHtml encodes `- [x]` items,
+  // since Asana's html_notes allowlist has no checkbox markup.
+  const liStrikeChild = (li) => {
+    let strike = null;
+    for (const n of li.childNodes) {
+      if (n.nodeType === 3) { if (n.textContent.trim()) return null; continue; }
+      if (n.nodeType !== 1) continue;
+      if (n.tagName.toLowerCase() !== 's' || strike) return null;
+      strike = n;
+    }
+    return strike;
+  };
   const walk = (node) => {
     let md = '';
     for (const child of node.childNodes) {
@@ -3394,7 +3407,20 @@ function asanaHtmlToMarkdown(html) {
         case 'pre': md += `\n\`\`\`\n${inner}\n\`\`\`\n`; break;
         case 'u': md += `<u>${inner}</u>`; break;
         case 'a': md += `[${inner}](${child.getAttribute('href') || ''})`; break;
-        case 'ul': md += '\n' + Array.from(child.children).map(li => `- ${walk(li)}`).join('\n') + '\n'; break;
+        case 'ul': {
+          const items = Array.from(child.children);
+          const strikes = items.map(liStrikeChild);
+          const isTaskList = strikes.some(Boolean);
+          if (isTaskList) {
+            md += '\n' + items.map((li, i) => {
+              const s = strikes[i];
+              return s ? `- [x] ${walk(s)}` : `- [ ] ${walk(li)}`;
+            }).join('\n') + '\n';
+          } else {
+            md += '\n' + items.map(li => `- ${walk(li)}`).join('\n') + '\n';
+          }
+          break;
+        }
         case 'ol': md += '\n' + Array.from(child.children).map((li, i) => `${i + 1}. ${walk(li)}`).join('\n') + '\n'; break;
         case 'li': md += inner; break;
         case 'br': md += '\n'; break;
