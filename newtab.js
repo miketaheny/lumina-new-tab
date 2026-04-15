@@ -503,24 +503,26 @@ function renderLinks() {
 
   Array.from(grid.querySelectorAll('.ql-item, .ql-section-header, .ql-section-items')).forEach(el => el.remove());
 
-  const sections = state.qlSections?.length ? state.qlSections : [{ id: 'default', label: 'Quick Links' }];
+  const allSections = state.qlSections?.length ? state.qlSections : [{ id: 'default', label: 'Quick Links' }];
+  // Ensure stray links fall back to a valid section before filtering.
+  const firstSectionId = allSections[0].id;
+  state.links.forEach(l => {
+    if (!l.section || !allSections.find(s => s.id === l.section)) l.section = firstSectionId;
+  });
+  // Bookmark-synced sections live in the side-panel Bookmarks tab only.
+  const sections = allSections.filter(s => !s.fromBookmark);
   const iconMode = !!state.qlIconsOnly;
   const showHeaders = sections.length > 1;
 
   grid.classList.toggle('icons-only', iconMode);
   document.getElementById('ql-icon-toggle').classList.toggle('on', iconMode);
 
-  if (!state.links.length) {
+  const visibleLinks = state.links.filter(l => sections.find(s => s.id === l.section));
+  if (!visibleLinks.length) {
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
-
-  // Ensure all links have a valid section
-  const firstSectionId = sections[0].id;
-  state.links.forEach(l => {
-    if (!l.section || !sections.find(s => s.id === l.section)) l.section = firstSectionId;
-  });
 
   let animIdx = 0;
   sections.forEach(section => {
