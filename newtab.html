@@ -3060,8 +3060,21 @@
       flex-shrink: 0;
     }
 
+    .saved-item-read {
+      padding: 4px;
+      background: none;
+      border: none;
+      border-radius: 5px;
+      display: inline-flex;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .saved-item.is-read .saved-item-read { color: #fbbf24 !important; }
+
     .saved-item:hover .saved-item-edit,
     .saved-item:hover .saved-item-copy,
+    .saved-item:hover .saved-item-read,
     .saved-item:hover .saved-item-delete {
       color: var(--text-muted);
     }
@@ -3079,6 +3092,16 @@
     .saved-item-delete:hover {
       color: #fca5a5 !important;
       background: rgba(239, 68, 68, 0.15);
+    }
+
+    .saved-item.is-read { opacity: 0.55; }
+    .saved-item.is-read .saved-item-title {
+      text-decoration: line-through;
+      text-decoration-color: rgba(167,139,250,0.5);
+    }
+    .saved-item-read:hover {
+      color: #fbbf24 !important;
+      background: rgba(251, 191, 36, 0.15);
     }
 
     /* Tag color picker in modal */
@@ -3204,7 +3227,7 @@
       <div id="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:4px;">
         <div id="public-ip" style="font-size:10px;letter-spacing:0.12em;color:rgba(255,255,255,0.35);text-transform:uppercase;"></div>
         <div style="display:flex;gap:8px;align-items:center;">
-        <button class="icon-btn" id="notes-btn" data-tip="Notes & Saved Links">
+        <button class="icon-btn" id="notes-btn" data-tip="Notes, Bookmarks & Kindling">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -3411,9 +3434,10 @@
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Saved Links</div>
-      <p class="help-p">A personal reading list. Open the notepad icon → Saved Links tab. The panel can be Light, Dark,
-        or System themed independently of the background.</p>
+      <div class="help-section-title">Kindling</div>
+      <p class="help-p">Your reading list — articles, threads, and pages you'll come back to. Open the notepad icon →
+        Kindling tab. Mark items read once you've finished; filter by <strong>Unread</strong> / <strong>Read</strong> or
+        by tag. The panel can be Light, Dark, or System themed independently of the background.</p>
       <div class="help-row"><span class="help-row-label">Add from panel</span><span class="help-row-desc">+ Add Link
           button inside the tab</span></div>
       <div class="help-row"><span class="help-row-label">Save current tab</span><span class="help-row-desc">Click the
@@ -3456,7 +3480,7 @@
       <div class="help-row"><span class="help-row-label">Custom wallpaper</span><span class="help-row-desc">Upload one
           or more images; filename becomes the title; edit emoji/title on the card. Only titles and selection sync (not
           image data), so sync stays small.</span></div>
-      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Saved Links
+      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Kindling
           panel: Dark · Light · System (follows OS)</span></div>
       <div class="help-row"><span class="help-row-label">Daily Focus</span><span class="help-row-desc">Settings → Daily
           Focus — quotes rotate daily; fetch extras from ZenQuotes</span></div>
@@ -3861,7 +3885,7 @@
       <div class="notes-tabs">
         <button class="notes-tab active" data-tab="notes">Notes</button>
         <button class="notes-tab" data-tab="bookmarks">Bookmarks</button>
-        <button class="notes-tab" data-tab="saved">Saved Links</button>
+        <button class="notes-tab" data-tab="saved">Kindling</button>
       </div>
       <button id="notes-theme-toggle" title="Toggle light/dark" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center;transition:color 0.2s;">
         <svg id="notes-theme-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3999,8 +4023,8 @@
       </div>
       <div id="saved-filters"></div>
       <div id="saved-list">
-        <div id="saved-empty">No saved links yet.<br><small style="opacity:0.6">Use the bookmark button in any tab to
-            save from anywhere.</small></div>
+        <div id="saved-empty">Kindling is empty.<br><small style="opacity:0.6">Add a link from the button above, or
+            click the Lumina icon in Chrome's toolbar on any page to stash it here.</small></div>
       </div>
     </div>
   </div>
