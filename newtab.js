@@ -49,6 +49,7 @@ if (state.wallpaperTheme !== undefined) {
 }
 if (!Array.isArray(state.wallpaperThemes)) state.wallpaperThemes = [];
 
+if (!Array.isArray(state.notes)) state.notes = [];
 if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
   state.activeNoteId = state.notes[0]?.id || 'note-1';
 }
@@ -56,11 +57,19 @@ if (!Array.isArray(state.addressBook)) state.addressBook = [];
 let editingId = null;
 let animFrameId = null;
 let bgTime = Math.random() * 10000;
+let archiveDebounceTimer = null;
 
 function saveState(opts) {
   localStorage.setItem('lumina_state', JSON.stringify(state));
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
+  }
+  // Debounced settings archive — snapshot every 30s at most
+  if (!opts?.skipSchedule) {
+    clearTimeout(archiveDebounceTimer);
+    archiveDebounceTimer = setTimeout(() => {
+      if (typeof archiveCurrentSettings === 'function') archiveCurrentSettings();
+    }, 30000);
   }
   if (opts?.skipSchedule) return;
   schedulePush();
@@ -303,15 +312,61 @@ function getFaviconUrl(url) {
 }
 
 
+// Detect generic/low-detail favicons by drawing to canvas and checking color variance.
+// Returns true if the image is mostly a single flat color (default/placeholder icon).
+// Uses a re-fetch with a blob to avoid CORS tainting the canvas.
+function checkGenericFavicon(img) {
+  const fallback = img.nextElementSibling;
+  if (!fallback) return;
+  const src = img.src;
+  fetch(src).then(r => r.blob()).then(blob => {
+    const blobUrl = URL.createObjectURL(blob);
+    const test = new Image();
+    test.onload = () => {
+      try {
+        const size = 32;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(test, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        const total = data.length / 4;
+        let rSum = 0, gSum = 0, bSum = 0, opaque = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] < 30) continue;
+          opaque++;
+          rSum += data[i]; gSum += data[i + 1]; bSum += data[i + 2];
+        }
+        const isGeneric = opaque < total * 0.1 || (() => {
+          const rAvg = rSum / opaque, gAvg = gSum / opaque, bAvg = bSum / opaque;
+          let variance = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 30) continue;
+            variance += (data[i] - rAvg) ** 2 + (data[i + 1] - gAvg) ** 2 + (data[i + 2] - bAvg) ** 2;
+          }
+          return (variance / (opaque * 3)) < 200;
+        })();
+        if (isGeneric) {
+          img.style.display = 'none';
+          fallback.style.display = 'flex';
+        }
+      } catch {}
+      URL.revokeObjectURL(blobUrl);
+    };
+    test.onerror = () => URL.revokeObjectURL(blobUrl);
+    test.src = blobUrl;
+  }).catch(() => {});
+}
+
 // Build favicon <img> HTML:
-//   Google service → if 16px generic globe or network error → letter
+//   Google service → if 16px generic globe, low-detail, or network error → letter
 function faviconImgHtml(url, label, cssClass, bgOverride) {
   const googleUrl = getFaviconUrl(url);
   const letter = (label || '?')[0].toUpperCase();
   const fallbackDiv = `<div class="${cssClass} fallback" style="display:none">${letter}</div>`;
   if (!googleUrl) return `<div class="${cssClass} fallback">${letter}</div>`;
   const bgStyle = bgOverride ? ` style="background:${bgOverride}"` : '';
-  const onload = `if(this.naturalWidth<=16&&this.naturalHeight<=16){this.style.display='none';this.nextElementSibling.style.display='flex'}`;
+  const onload = `if(this.naturalWidth<=16&&this.naturalHeight<=16){this.style.display='none';this.nextElementSibling.style.display='flex'}else{checkGenericFavicon(this)}`;
   const onerror = `this.style.display='none';this.nextElementSibling.style.display='flex'`;
   return `<img class="${cssClass}" src="${googleUrl}" alt=""${bgStyle} onload="${onload}" onerror="${onerror}" />${fallbackDiv}`;
 }
@@ -448,72 +503,26 @@ function renderLinks() {
 
   Array.from(grid.querySelectorAll('.ql-item, .ql-section-header, .ql-section-items')).forEach(el => el.remove());
 
-  const sections = state.qlSections?.length ? state.qlSections : [{ id: 'default', label: 'Quick Links' }];
   const iconMode = !!state.qlIconsOnly;
-  const showHeaders = sections.length > 1;
-
   grid.classList.toggle('icons-only', iconMode);
   document.getElementById('ql-icon-toggle').classList.toggle('on', iconMode);
 
-  if (!state.links.length) {
+  // Bookmark-synced links are managed from the side-panel Bookmarks tab, not
+  // the main-panel quick-links list.
+  const visibleLinks = (state.links || []).filter(l => !l.fromBookmark);
+  if (!visibleLinks.length) {
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
 
-  // Ensure all links have a valid section
-  const firstSectionId = sections[0].id;
-  state.links.forEach(l => {
-    if (!l.section || !sections.find(s => s.id === l.section)) l.section = firstSectionId;
-  });
-
   let animIdx = 0;
-  sections.forEach(section => {
-    const sectionLinks = state.links.filter(l => l.section === section.id);
-    const isCollapsed = !!(state.qlCollapsed?.[section.id]);
-    if (showHeaders) {
-      const header = document.createElement('div');
-      header.className = 'ql-section-header';
-      header.dataset.sectionId = section.id;
-      header.innerHTML = `
-        <button class="ql-section-caret${isCollapsed ? '' : ' expanded'}" title="Toggle section">▶</button>
-        <input class="ql-section-label" value="${escHtml(section.label)}" spellcheck="false" />
-        <div class="ql-section-sep"></div>
-        <button class="ql-section-btn ql-section-del-btn" title="Delete section" ${sectionLinks.length ? 'disabled style="opacity:0.25;cursor:default"' : ''}>✕</button>
-      `;
-      const labelInput = header.querySelector('.ql-section-label');
-      labelInput.addEventListener('blur', () => {
-        const s = state.qlSections.find(s => s.id === section.id);
-        if (s) {
-          s.label = labelInput.value.trim() || section.label;
-          saveState();
-          if (s.fromBookmark && s.id.startsWith('bms-') && chrome?.bookmarks) {
-            chrome.bookmarks.update(s.id.slice(4), { title: s.label }).catch(() => {});
-          }
-        }
-      });
-      labelInput.addEventListener('keydown', e => { if (e.key === 'Enter') labelInput.blur(); });
-      header.querySelector('.ql-section-caret').addEventListener('click', () => {
-        if (!state.qlCollapsed) state.qlCollapsed = {};
-        state.qlCollapsed[section.id] = !state.qlCollapsed[section.id];
-        saveState(); renderLinks();
-      });
-      header.querySelector('.ql-section-del-btn').addEventListener('click', () => {
-        const hasLinks = state.links.some(l => l.section === section.id);
-        if (hasLinks) { showToast('Move or delete all links in this section first'); return; }
-        state.qlSections = state.qlSections.filter(s => s.id !== section.id);
-        saveState(); renderLinks();
-      });
-      grid.appendChild(header);
-    }
-
-    if (isCollapsed) return;
-
+  {
     const itemRow = document.createElement('div');
     itemRow.className = 'ql-section-items';
     grid.appendChild(itemRow);
 
-    sectionLinks.forEach(link => {
+    visibleLinks.forEach(link => {
       const item = document.createElement('a');
       item.className = 'ql-item' + (iconMode ? ' icon-only' : '');
       item.href = link.url;
@@ -568,6 +577,88 @@ function renderLinks() {
 
       itemRow.appendChild(item);
     });
+  }
+
+  renderSidePanelQuickLinks();
+}
+
+function svgFromString(str) {
+  return new DOMParser().parseFromString(str, 'text/html').body.firstChild;
+}
+
+function renderSidePanelQuickLinks() {
+  const host = document.getElementById('bm-quicklinks');
+  if (!host) return;
+  const links = (state.links || []).filter(l => !l.fromBookmark);
+
+  host.replaceChildren();
+
+  const header = document.createElement('div');
+  header.className = 'bm-ql-header';
+  const title = document.createElement('span');
+  title.textContent = 'Quick Links';
+  const addBtn = document.createElement('button');
+  addBtn.className = 'bm-ql-add';
+  addBtn.title = 'Add link';
+  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
+  addBtn.addEventListener('click', () => openAddModal());
+  header.append(title, addBtn);
+  host.appendChild(header);
+
+  if (!links.length) {
+    const empty = document.createElement('div');
+    empty.className = 'bm-ql-empty';
+    empty.textContent = 'No quick links yet.';
+    host.appendChild(empty);
+    return;
+  }
+
+  links.forEach(link => {
+    const row = document.createElement('div');
+    row.className = 'bm-row';
+
+    const chev = document.createElement('span');
+    chev.className = 'bm-chevron empty';
+
+    const icon = document.createElement('span');
+    icon.className = 'bm-icon';
+    if (link.icon && HEROICONS[link.icon]) {
+      icon.style.color = 'var(--text-muted)';
+      icon.appendChild(svgFromString(heroiconSvg(link.icon, 14)));
+    } else {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = link.favicon || getFaviconUrl(link.url) || '';
+      img.addEventListener('error', () => { img.style.display = 'none'; });
+      icon.appendChild(img);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'bm-label';
+    label.textContent = link.label || getUrlLabel(link.url);
+    label.title = link.url;
+
+    const actions = document.createElement('span');
+    actions.className = 'bm-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bm-act';
+    editBtn.title = 'Edit';
+    editBtn.appendChild(svgFromString(bmEditSvg()));
+    editBtn.addEventListener('click', e => { e.stopPropagation(); openEditModal(link.id); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bm-act';
+    delBtn.title = 'Delete';
+    delBtn.appendChild(svgFromString(bmDeleteSvg()));
+    delBtn.addEventListener('click', e => { e.stopPropagation(); deleteLink(link.id); });
+    actions.append(editBtn, delBtn);
+
+    row.append(chev, icon, label, actions);
+    row.addEventListener('click', () => { window.location.href = link.url; });
+    row.addEventListener('auxclick', e => {
+      if (e.button === 1) { e.preventDefault(); window.open(link.url, '_blank'); }
+    });
+
+    host.appendChild(row);
   });
 }
 
@@ -687,24 +778,9 @@ function setupDrag(el) {
     const toIdx = state.links.findIndex(l => l.id === toId);
     if (fromIdx < 0 || toIdx < 0) return;
     const moved = state.links[fromIdx];
-    const targetSection = state.links[toIdx].section;
-    moved.section = targetSection;
     state.links.splice(fromIdx, 1);
     state.links.splice(toIdx, 0, moved);
     saveState(); renderLinks();
-
-    // Sync reorder/move to Chrome bookmarks
-    if (chrome?.bookmarks) {
-      const bmId = moved.bmId || (moved.fromBookmark && moved.id.startsWith('bm-') ? moved.id.slice(3) : null);
-      if (bmId) {
-        const targetFolderId = targetSection?.startsWith('bms-') ? targetSection.slice(4) : null;
-        if (targetFolderId) {
-          const sectionLinks = state.links.filter(l => l.section === targetSection);
-          const newIndex = sectionLinks.findIndex(l => l.id === moved.id);
-          chrome.bookmarks.move(bmId, { parentId: targetFolderId, index: newIndex }).catch(() => {});
-        }
-      }
-    }
   });
 }
 
@@ -712,19 +788,6 @@ function setupDrag(el) {
 document.getElementById('ql-icon-toggle').addEventListener('click', () => {
   state.qlIconsOnly = !state.qlIconsOnly;
   saveState(); renderLinks();
-});
-
-// ─── SECTION MANAGEMENT ──────────────────────────
-document.getElementById('ql-add-section-btn').addEventListener('click', () => {
-  if (!state.qlSections) state.qlSections = [{ id: 'default', label: 'Quick Links' }];
-  const id = 'ql-s-' + Date.now();
-  state.qlSections.push({ id, label: 'New Section' });
-  saveState(); renderLinks();
-  // Focus the new section label for immediate rename
-  setTimeout(() => {
-    const el = document.querySelector(`.ql-section-header[data-section-id="${id}"] .ql-section-label`);
-    if (el) { el.focus(); el.select(); }
-  }, 50);
 });
 
 // ─── ADD / EDIT MODAL ────────────────────────────
@@ -741,10 +804,6 @@ function openAddModal() {
   document.getElementById('modal-icon-picker').style.display = 'none';
   document.getElementById('modal-no-favicon').checked = false;
   setModalFaviconBg('white');
-  const secSelAdd = document.getElementById('modal-section');
-  secSelAdd.innerHTML = (state.qlSections || [{ id: 'default', label: 'Quick Links' }])
-    .map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`)
-    .join('');
   showModal();
 }
 
@@ -760,11 +819,6 @@ function openEditModal(id) {
   setModalIcon(link.icon || null);
   document.getElementById('modal-no-favicon').checked = !!link.noFavicon;
   setModalFaviconBg(link.faviconBg || 'white');
-  // populate section dropdown
-  const secSel = document.getElementById('modal-section');
-  secSel.innerHTML = (state.qlSections || [{ id: 'default', label: 'Quick Links' }])
-    .map(s => `<option value="${s.id}"${(link.section || 'default') === s.id ? ' selected' : ''}>${escHtml(s.label)}</option>`)
-    .join('');
   showModal();
 }
 
@@ -797,27 +851,16 @@ document.getElementById('modal-save').addEventListener('click', async () => {
 
   if (!label) label = getUrlLabel(url);
 
-  const section = document.getElementById('modal-section').value;
   const noFavicon = document.getElementById('modal-no-favicon').checked;
   if (editingId) {
     const link = state.links.find(l => l.id === editingId);
     if (link) {
-      link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null; link.section = section;
+      link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null;
       link.noFavicon = noFavicon || null; link.faviconBg = _modalFaviconBg !== 'white' ? _modalFaviconBg : null;
-      const chromeId = link.bmId || (link.fromBookmark && link.id.startsWith('bm-') ? link.id.slice(3) : null);
-      if (chromeId && chrome?.bookmarks) chrome.bookmarks.update(chromeId, { url, title: label }).catch(() => {});
     }
   } else {
-    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, section, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
+    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
     state.links.push(newLink);
-    if (state.bmFolderId && chrome?.bookmarks) {
-      const parentId = section.startsWith('bms-') ? section.slice(4) : state.bmFolderId;
-      chrome.bookmarks.create({ parentId, url, title: label }).then(bm => {
-        newLink.fromBookmark = true;
-        newLink.bmId = bm.id;
-        saveState();
-      }).catch(() => {});
-    }
   }
 
   saveState(); renderLinks(); hideModal();
@@ -1217,12 +1260,16 @@ function buildThemeGrid() {
 
 // ─── FOCUS LINES ─────────────────────────────────
 const DEFAULT_FOCUS_LINES = [
-  'Deep work · Ship it · Stay present',
-  'Make it simple. Make it fast.',
-  'One thing at a time.',
-  'Build something that matters.',
-  'Think clearly. Act deliberately.',
-  'Progress over perfection.',
+  'Core values, loud signal — ship the thing that sounds like you.',
+  'Tune the message before you amp the budget.',
+  'Great brands riff — they don\'t read from a script.',
+  'Strategy is rhythm. Creative is melody. Ship the whole song.',
+  'Make the work the work. Promote it after.',
+  'A twelve-fret run: small moves, in order, no flash.',
+  'Be useful before you\'re clever. Be clever before you\'re loud.',
+  'If it doesn\'t move a number, it\'s a mood board.',
+  'Brand is what you repeat. Growth is what compounds.',
+  'Write like a person. Measure like an operator.',
 ];
 
 function getFocusLines() { return state.focusLines ?? DEFAULT_FOCUS_LINES; }
@@ -1281,23 +1328,6 @@ function setupFocusLineManagement() {
   document.getElementById('focus-reset-btn').addEventListener('click', () => {
     state.focusLines = null;
     saveState(); buildFocusLinesList(); applyFocusLine();
-  });
-  document.getElementById('focus-fetch-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('focus-fetch-btn');
-    btn.textContent = '…';
-    btn.disabled = true;
-    try {
-      const resp = await fetch('https://zenquotes.io/api/random');
-      const data = await resp.json();
-      if (data[0]?.q) {
-        const quote = data[0].q + (data[0].a ? ' — ' + data[0].a : '');
-        if (!state.focusLines) state.focusLines = [...getFocusLines()];
-        state.focusLines.push(quote);
-        saveState(); buildFocusLinesList(); applyFocusLine();
-      }
-    } catch {}
-    btn.textContent = '✨ Fetch from API';
-    btn.disabled = false;
   });
 }
 
@@ -1506,15 +1536,13 @@ function syncSettings() {
   const locNameEl = document.getElementById('weather-loc-name');
   if (locNameEl && cachedWx?.location) locNameEl.textContent = cachedWx.location;
 
-  // bg mode toggle (OFF = colors, ON = wallpaper)
+  // bg mode segmented tabs
   const bgMode = state.bgMode || 'colors';
-  const bgModeToggle = document.getElementById('toggle-bg-mode');
-  const bgModeLabel = document.getElementById('bg-mode-label');
+  const bgModeTabs = document.querySelectorAll('.bg-mode-tab');
 
   function applyBgModeUI(mode) {
     const isWallpaper = mode === 'wallpaper';
-    bgModeToggle.classList.toggle('on', isWallpaper);
-    bgModeLabel.textContent = isWallpaper ? 'Wallpaper' : 'Colors';
+    bgModeTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
     document.getElementById('bg-pane-colors').classList.toggle('active', !isWallpaper);
     document.getElementById('bg-pane-wallpaper').classList.toggle('active', isWallpaper);
     if (isWallpaper) {
@@ -1524,11 +1552,13 @@ function syncSettings() {
     }
   }
 
-  bgModeToggle.onclick = () => {
-    state.bgMode = state.bgMode === 'wallpaper' ? 'colors' : 'wallpaper';
-    saveState();
-    applyBgModeUI(state.bgMode);
-  };
+  bgModeTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      state.bgMode = tab.dataset.mode;
+      saveState();
+      applyBgModeUI(state.bgMode);
+    });
+  });
 
   applyBgModeUI(bgMode);
 
@@ -1637,6 +1667,26 @@ function applyPanelTheme(theme) {
     btn.style.borderColor = active ? 'rgba(167,139,250,0.4)' : '';
     btn.style.color = active ? 'rgba(255,255,255,0.92)' : '';
   });
+  // Update notes panel toggle icon (moon = dark, sun = light)
+  const icon = document.getElementById('notes-theme-icon');
+  if (icon) {
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+    icon.innerHTML = isLight
+      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      : '<path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>';
+  }
+}
+
+function applySettingsTheme(theme) {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('settings-light', theme === 'light');
+  const icon = document.getElementById('settings-theme-icon');
+  if (icon) {
+    const isLight = theme === 'light';
+    icon.innerHTML = isLight
+      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      : '<path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>';
+  }
 }
 
 document.querySelectorAll('.panel-theme-btn').forEach(btn => {
@@ -1645,6 +1695,21 @@ document.querySelectorAll('.panel-theme-btn').forEach(btn => {
     saveState();
     applyPanelTheme(state.panelTheme);
   });
+});
+
+// Notes panel quick light/dark toggle
+document.getElementById('notes-theme-toggle').addEventListener('click', () => {
+  const current = state.panelTheme || 'dark';
+  state.panelTheme = current === 'light' ? 'dark' : 'light';
+  saveState();
+  applyPanelTheme(state.panelTheme);
+});
+
+// Settings panel light/dark toggle
+document.getElementById('settings-theme-toggle').addEventListener('click', () => {
+  state.settingsTheme = state.settingsTheme === 'light' ? 'dark' : 'light';
+  saveState();
+  applySettingsTheme(state.settingsTheme);
 });
 
 function openSettingsPanel() {
@@ -1881,43 +1946,285 @@ function closeNotesPanel() {
 // Tab switching
 document.querySelectorAll('.notes-tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    const which = tab.dataset.tab;
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-    document.getElementById('notes-tab-content').classList.toggle('active', tab.dataset.tab === 'notes');
-    document.getElementById('saved-tab-content').classList.toggle('active', tab.dataset.tab === 'saved');
+    document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
+    document.getElementById('bookmarks-tab-content').classList.toggle('active', which === 'bookmarks');
+    document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
+    if (which === 'bookmarks') renderBookmarksTree();
   });
 });
 
-// ── Inline live notes (Typora/Obsidian style): contenteditable, stored as markdown ───
-const notesEditor = document.getElementById('notes-editor');
-const notesSource = document.getElementById('notes-source');
-if (notesEditor) document.execCommand('defaultParagraphSeparator', false, 'p');
-
-// ── Undo history (in-memory per note, resets on page load) ──
-const noteUndoStacks = {}; // { noteId: [mdSnapshot, ...] }
-const NOTE_UNDO_MAX = 50;
-let noteUndoPushTimer = null;
-
-function pushNoteHistory(noteId, content) {
-  if (!noteUndoStacks[noteId]) noteUndoStacks[noteId] = [];
-  const stack = noteUndoStacks[noteId];
-  if (stack.length && stack[stack.length - 1] === content) return;
-  stack.push(content);
-  if (stack.length > NOTE_UNDO_MAX) stack.shift();
-  updateUndoBtn();
+// ─── BOOKMARKS TREE ──────────────────────────────────────────────────────────
+const BM_COLLAPSED_KEY = 'lumina_bm_collapsed';
+let bmCollapsed = new Set(JSON.parse(localStorage.getItem(BM_COLLAPSED_KEY) || '[]'));
+function bmSaveCollapsed() {
+  localStorage.setItem(BM_COLLAPSED_KEY, JSON.stringify([...bmCollapsed]));
 }
 
-function schedulePushNoteHistory() {
-  clearTimeout(noteUndoPushTimer);
-  noteUndoPushTimer = setTimeout(() => {
-    const note = state.notes?.find(n => n.id === state.activeNoteId);
-    if (note) pushNoteHistory(note.id, note.content);
-  }, 1000);
+function bmChevronSvg() {
+  return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+}
+function bmFolderSvg() {
+  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+}
+function bmEditSvg() {
+  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+}
+function bmDeleteSvg() {
+  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+}
+
+function bmMakeFolderRow(node) {
+  const row = document.createElement('div');
+  row.className = 'bm-row';
+  const collapsed = bmCollapsed.has(node.id);
+  const hasChildren = (node.children || []).length > 0;
+  const chev = document.createElement('span');
+  chev.className = 'bm-chevron' + (collapsed ? ' collapsed' : '') + (hasChildren ? '' : ' empty');
+  chev.innerHTML = bmChevronSvg();
+  const icon = document.createElement('span');
+  icon.className = 'bm-icon';
+  icon.style.color = 'var(--text-muted)';
+  icon.innerHTML = bmFolderSvg();
+  const label = document.createElement('span');
+  label.className = 'bm-label bm-folder-label';
+  label.textContent = node.title || '(unnamed folder)';
+
+  const actions = document.createElement('span');
+  actions.className = 'bm-actions';
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'bm-act';
+  addBtn.title = 'New subfolder';
+  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
+  addBtn.addEventListener('click', e => { e.stopPropagation(); bmCreateFolder(node.id); });
+  actions.appendChild(addBtn);
+
+  const isRoot = ['0', '1', '2', '3'].includes(node.id);
+  if (!isRoot) {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bm-act';
+    editBtn.title = 'Rename folder';
+    editBtn.appendChild(svgFromString(bmEditSvg()));
+    editBtn.addEventListener('click', e => { e.stopPropagation(); bmRenameFolder(node); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bm-act';
+    delBtn.title = 'Delete folder';
+    delBtn.appendChild(svgFromString(bmDeleteSvg()));
+    delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteFolder(node); });
+    actions.append(editBtn, delBtn);
+  }
+
+  row.append(chev, icon, label, actions);
+  return { row, chev };
+}
+
+async function bmCreateFolder(parentId) {
+  const title = prompt('New folder name:');
+  if (!title) return;
+  try {
+    await chrome.bookmarks.create({ parentId, title });
+    if (parentId) bmCollapsed.delete(parentId);
+    bmSaveCollapsed();
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] create folder failed', e); }
+}
+
+async function bmRenameFolder(node) {
+  const title = prompt('Rename folder:', node.title || '');
+  if (title === null) return;
+  try {
+    await chrome.bookmarks.update(node.id, { title });
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] rename folder failed', e); }
+}
+
+async function bmDeleteFolder(node) {
+  const count = (node.children || []).length;
+  const msg = count
+    ? `Delete folder "${node.title}" and all ${count} items inside?`
+    : `Delete folder "${node.title}"?`;
+  if (!confirm(msg)) return;
+  try {
+    await chrome.bookmarks.removeTree(node.id);
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] delete folder failed', e); }
+}
+
+function bmMakeBookmarkRow(node) {
+  const row = document.createElement('div');
+  row.className = 'bm-row';
+  const chev = document.createElement('span');
+  chev.className = 'bm-chevron empty';
+  const icon = document.createElement('span');
+  icon.className = 'bm-icon';
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = getFaviconUrl(node.url) || '';
+  img.addEventListener('error', () => { img.style.display = 'none'; });
+  icon.appendChild(img);
+  const label = document.createElement('span');
+  label.className = 'bm-label';
+  label.textContent = node.title || node.url;
+  label.title = node.url;
+
+  const actions = document.createElement('span');
+  actions.className = 'bm-actions';
+  const editBtn = document.createElement('button');
+  editBtn.className = 'bm-act';
+  editBtn.title = 'Edit';
+  editBtn.innerHTML = bmEditSvg();
+  editBtn.addEventListener('click', e => { e.stopPropagation(); bmEditBookmark(node); });
+  const delBtn = document.createElement('button');
+  delBtn.className = 'bm-act';
+  delBtn.title = 'Delete';
+  delBtn.innerHTML = bmDeleteSvg();
+  delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteBookmark(node); });
+  actions.append(editBtn, delBtn);
+
+  row.append(chev, icon, label, actions);
+  row.addEventListener('click', () => { window.location.href = node.url; });
+  row.addEventListener('auxclick', e => {
+    if (e.button === 1) { e.preventDefault(); window.open(node.url, '_blank'); }
+  });
+  return row;
+}
+
+function bmBuildNode(node) {
+  if (node.url) return bmMakeBookmarkRow(node);
+  const wrap = document.createElement('div');
+  wrap.className = 'bm-node';
+  const { row, chev } = bmMakeFolderRow(node);
+  const kids = document.createElement('div');
+  kids.className = 'bm-children' + (bmCollapsed.has(node.id) ? ' collapsed' : '');
+  (node.children || []).forEach(child => kids.appendChild(bmBuildNode(child)));
+  row.addEventListener('click', () => {
+    const isCollapsed = kids.classList.toggle('collapsed');
+    chev.classList.toggle('collapsed', isCollapsed);
+    if (isCollapsed) bmCollapsed.add(node.id); else bmCollapsed.delete(node.id);
+    bmSaveCollapsed();
+  });
+  wrap.append(row, kids);
+  return wrap;
+}
+
+function bmFilterTree(node, query) {
+  if (node.url) {
+    const hay = ((node.title || '') + ' ' + node.url).toLowerCase();
+    return hay.includes(query) ? { ...node } : null;
+  }
+  const kids = (node.children || []).map(c => bmFilterTree(c, query)).filter(Boolean);
+  if (!kids.length) return null;
+  return { ...node, children: kids };
+}
+
+async function bmEditBookmark(node) {
+  const newTitle = prompt('Edit bookmark title:', node.title || '');
+  if (newTitle === null) return;
+  const newUrl = prompt('Edit bookmark URL:', node.url || '');
+  if (newUrl === null) return;
+  try {
+    await chrome.bookmarks.update(node.id, { title: newTitle, url: newUrl });
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] edit failed', e); }
+}
+
+async function bmDeleteBookmark(node) {
+  if (!confirm(`Delete "${node.title || node.url}"?`)) return;
+  try {
+    await chrome.bookmarks.remove(node.id);
+    renderBookmarksTree();
+  } catch (e) { console.error('[bookmarks] delete failed', e); }
+}
+
+async function renderBookmarksTree() {
+  const host = document.getElementById('bm-tree');
+  if (!host) return;
+  if (!chrome?.bookmarks) {
+    host.innerHTML = '<div class="bm-empty">Bookmarks API not available.</div>';
+    return;
+  }
+  try {
+    const tree = await chrome.bookmarks.getTree();
+    const searchEl = document.getElementById('bm-tree-search');
+    const query = (searchEl?.value || '').trim().toLowerCase();
+    host.innerHTML = '';
+    const roots = tree[0]?.children || [];
+    const visible = query
+      ? roots.map(r => bmFilterTree(r, query)).filter(Boolean)
+      : roots;
+    if (!visible.length) {
+      host.innerHTML = '<div class="bm-empty">No bookmarks match.</div>';
+      return;
+    }
+    visible.forEach(root => {
+      const kids = (root.children || []);
+      if (!kids.length && !query) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'bm-node';
+      const { row, chev } = bmMakeFolderRow(root);
+      const kidsEl = document.createElement('div');
+      kidsEl.className = 'bm-children' + (bmCollapsed.has(root.id) ? ' collapsed' : '');
+      kids.forEach(child => kidsEl.appendChild(bmBuildNode(child)));
+      row.addEventListener('click', () => {
+        const isCollapsed = kidsEl.classList.toggle('collapsed');
+        chev.classList.toggle('collapsed', isCollapsed);
+        if (isCollapsed) bmCollapsed.add(root.id); else bmCollapsed.delete(root.id);
+        bmSaveCollapsed();
+      });
+      wrap.append(row, kidsEl);
+      host.appendChild(wrap);
+    });
+  } catch (e) {
+    host.innerHTML = '<div class="bm-empty">Error loading bookmarks.</div>';
+    console.error('[bookmarks] tree render failed', e);
+  }
+}
+
+{
+  const search = document.getElementById('bm-tree-search');
+  const refresh = document.getElementById('bm-tree-refresh');
+  let searchTimer;
+  search?.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderBookmarksTree, 150);
+  });
+  refresh?.addEventListener('click', () => renderBookmarksTree());
+  if (chrome?.bookmarks) {
+    const refreshIfOpen = () => {
+      if (document.getElementById('bookmarks-tab-content')?.classList.contains('active')) {
+        renderBookmarksTree();
+      }
+    };
+    chrome.bookmarks.onCreated?.addListener(refreshIfOpen);
+    chrome.bookmarks.onRemoved?.addListener(refreshIfOpen);
+    chrome.bookmarks.onChanged?.addListener(refreshIfOpen);
+    chrome.bookmarks.onMoved?.addListener(refreshIfOpen);
+  }
+}
+
+// ── Tiptap notes editor ──────────────────────────────────────────────────────────────
+const notesSource = document.getElementById('notes-source');
+let tiptapEditor = null;
+let _notesReady = false; // guard: skip saves during initial setContent
+
+{
+  const el = document.getElementById('notes-editor');
+  if (el && window.initTiptapEditor) {
+    tiptapEditor = window.initTiptapEditor(el, {
+      onChange: () => { saveNotes(); updateUndoBtn(); },
+      onSave:   () => { saveNotes(); flushSyncNow(); },
+    });
+  }
 }
 
 function updateUndoBtn() {
-  const stack = noteUndoStacks[state.activeNoteId];
   const btn = document.getElementById('undo-note-btn');
-  if (btn) btn.disabled = !stack || stack.length < 2;
+  if (!btn) return;
+  const canUndo = tiptapEditor ? tiptapEditor.can().undo() : false;
+  btn.disabled = !canUndo;
+  btn.style.opacity = canUndo ? '' : '0.35';
 }
 
 // ── Source mode ──
@@ -1927,7 +2234,7 @@ function enterSourceMode() {
   saveNotes();
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (notesSource) notesSource.value = note?.content ?? '';
-  if (notesEditor) notesEditor.style.display = 'none';
+  document.getElementById('notes-editor').style.display = 'none';
   if (notesSource) notesSource.style.display = 'block';
   notesSourceMode = true;
   document.getElementById('source-btn')?.classList.add('active');
@@ -1938,28 +2245,29 @@ function exitSourceMode() {
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (note && notesSource) {
     note.content = notesSource.value;
-    if (notesEditor) notesEditor.innerHTML = markdownToHtml(note.content);
-    pushNoteHistory(note.id, note.content);
+    _notesReady = false;
+    tiptapEditor?.commands.setContent(note.content);
+    _notesReady = true;
     saveState();
   }
   if (notesSource) notesSource.style.display = 'none';
-  if (notesEditor) notesEditor.style.display = '';
+  document.getElementById('notes-editor').style.display = '';
   notesSourceMode = false;
   document.getElementById('source-btn')?.classList.remove('active');
   document.querySelectorAll('#notes-toolbar .md-btn[data-cmd]').forEach(b => b.disabled = false);
 }
 
 function saveNotes() {
+  if (!_notesReady) return;
   const note = state.notes?.find(n => n.id === state.activeNoteId);
   if (note) {
     if (notesSourceMode && notesSource) {
       note.content = notesSource.value;
-    } else if (notesEditor) {
-      note.content = htmlToMarkdown(notesEditor.innerHTML);
+    } else if (tiptapEditor) {
+      note.content = tiptapEditor.storage.markdown.getMarkdown();
     }
-    schedulePushNoteHistory();
   }
-  saveState({ skipSchedule: true }); // only push on Cmd+S or tab close
+  saveState({ skipSchedule: true }); // only push to Asana on Cmd+S or tab close
 }
 
 function renderNoteTabs() {
@@ -2041,10 +2349,11 @@ function switchNote(id) {
   const note = state.notes.find(n => n.id === id);
   if (notesSourceMode && notesSource) {
     notesSource.value = note?.content ?? '';
-  } else if (notesEditor) {
-    notesEditor.innerHTML = markdownToHtml(note?.content ?? '');
+  } else if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(note?.content ?? '');
+    _notesReady = true;
   }
-  pushNoteHistory(id, note?.content ?? '');
   saveState();
   renderNoteTabs();
   updateUndoBtn();
@@ -2064,10 +2373,12 @@ function addNote() {
   const title = uniqueNoteName('untitled');
   state.notes.push({ id, title, content: '' });
   state.activeNoteId = id;
-  if (notesEditor) notesEditor.innerHTML = '<h1>Untitled</h1>';
+  _notesReady = false;
+  tiptapEditor?.commands.setContent('');
+  _notesReady = true;
   saveState();
   renderNoteTabs();
-  notesEditor?.focus();
+  tiptapEditor?.commands.focus();
 }
 
 function deleteNote(id) {
@@ -2075,21 +2386,19 @@ function deleteNote(id) {
   if (!confirm('Delete this note?')) return;
   const idx = state.notes.findIndex(n => n.id === id);
   const deleted = state.notes[idx];
-  const gistIdToDelete = deleted?.gistId;
   state.notes.splice(idx, 1);
   if (state.activeNoteId === id) {
     state.activeNoteId = state.notes[Math.max(0, idx - 1)].id;
   }
   const note = state.notes.find(n => n.id === state.activeNoteId);
-  if (notesEditor) notesEditor.innerHTML = markdownToHtml(note?.content ?? '');
+  if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(note?.content ?? '');
+    _notesReady = true;
+  }
   saveState();
   renderNoteTabs();
-  if (gistIdToDelete && getSyncPat()) {
-    fetch(`https://api.github.com/gists/${gistIdToDelete}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${getSyncPat()}` },
-    }).then(r => { if (!r.ok) showToast(`⚠ Delete gist: ${r.status}`); }).catch(() => {});
-  }
+  if (deleted?.asanaTaskGid) handleNoteDeletion(deleted.asanaTaskGid);
 }
 
 function htmlToMarkdown(html) {
@@ -2138,18 +2447,22 @@ function loadNotes() {
   const note = state.notes.find(n => n.id === state.activeNoteId) || state.notes[0];
   state.activeNoteId = note.id;
   let content = note.content ?? '';
+  // Migrate old HTML-stored notes to markdown
   if (content && content.trimStart().startsWith('<')) {
     note.content = htmlToMarkdown(content);
     content = note.content;
     saveState();
   }
-  if (notesEditor) notesEditor.innerHTML = markdownToHtml(content);
-  pushNoteHistory(note.id, content);
+  if (tiptapEditor) {
+    _notesReady = false;
+    tiptapEditor.commands.setContent(content);
+    _notesReady = true;
+  }
   updateUndoBtn();
   renderNoteTabs();
 }
 
-if (notesEditor) notesEditor.addEventListener('input', saveNotes);
+// Source textarea: save on input, Cmd+S flushes
 if (notesSource) notesSource.addEventListener('input', saveNotes);
 if (notesSource) notesSource.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -2159,137 +2472,39 @@ if (notesSource) notesSource.addEventListener('keydown', e => {
   }
 });
 
-// Paste: convert markdown to HTML when pasting plain markdown
-function looksLikeMarkdown(text) {
-  return /^#{1,6} .+/m.test(text) || /\*\*.+\*\*/s.test(text) || /^- \[[ xX]\]/m.test(text) ||
-    /^[-*] .+/m.test(text) || /\[.+\]\(https?:\/\/.+\)/.test(text);
-}
-notesEditor?.addEventListener('paste', e => {
-  const plain = e.clipboardData.getData('text/plain');
-  if (!plain || e.clipboardData.types.includes('text/html')) return;
-  if (!looksLikeMarkdown(plain)) return;
-  e.preventDefault();
-  document.execCommand('insertHTML', false, markdownToHtml(plain));
-  saveNotes();
-});
-
-// Checkbox toggle
-notesEditor?.addEventListener('click', e => {
-  const chk = e.target.closest('.note-chk');
-  if (!chk) return;
-  e.preventDefault();
-  const item = chk.closest('.check-item');
-  const isChecked = item.dataset.checked === 'true';
-  item.dataset.checked = isChecked ? 'false' : 'true';
-  chk.classList.toggle('checked', !isChecked);
-  chk.textContent = isChecked ? '' : '✓';
-  saveNotes();
-});
-
-// Toolbar: execCommand for inline formatting
-function getAnchorBlock() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  let node = sel.anchorNode;
-  while (node && node !== notesEditor) {
-    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|DIV|LI)$/.test(node.tagName)) return node;
-    node = node.parentNode;
-  }
-  return null;
-}
-
-function insertCodeFmt() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const selText = range.toString();
-  const code = document.createElement('code');
-  code.textContent = selText || '\u200b';
-  range.deleteContents();
-  range.insertNode(code);
-  const r = document.createRange();
-  r.selectNodeContents(code);
-  if (!selText) r.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(r);
-}
-
-function createCheckItem(text, checked) {
-  const item = document.createElement('div');
-  item.className = 'check-item';
-  item.dataset.checked = checked ? 'true' : 'false';
-  item.contentEditable = 'false';
-  const btn = document.createElement('button');
-  btn.className = 'note-chk' + (checked ? ' checked' : '');
-  btn.type = 'button';
-  btn.contentEditable = 'false';
-  if (checked) btn.textContent = '✓';
-  const span = document.createElement('span');
-  span.className = 'check-text';
-  span.contentEditable = 'true';
-  if (text) span.textContent = text;
-  item.appendChild(btn);
-  item.appendChild(span);
-  return item;
-}
-
-function insertCheckItem() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const selText = range.toString();
-  const item = createCheckItem(selText, false);
-  range.deleteContents();
-  const anchor = getAnchorBlock();
-  if (anchor && anchor.parentNode === notesEditor) {
-    anchor.after(item);
-  } else {
-    range.insertNode(item);
-  }
-  const span = item.querySelector('.check-text');
-  span.focus();
-  const r = document.createRange();
-  r.setStart(span, 0);
-  r.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(r);
-  saveNotes();
-}
-
+// Toolbar commands via Tiptap API
 function applyCmd(cmd) {
-  notesEditor?.focus();
+  if (!tiptapEditor) return;
+  const ch = tiptapEditor.chain().focus();
   switch (cmd) {
-    case 'bold':   document.execCommand('bold'); break;
-    case 'italic': document.execCommand('italic'); break;
-    case 'strike': {
-      const sel = window.getSelection();
-      if (sel && sel.isCollapsed) {
-        const block = getAnchorBlock();
-        if (block) {
-          const range = document.createRange();
-          range.selectNodeContents(block);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-      document.execCommand('strikeThrough');
+    case 'bold':         ch.toggleBold().run(); break;
+    case 'italic':       ch.toggleItalic().run(); break;
+    case 'underline':    ch.toggleUnderline().run(); break;
+    case 'strike':       ch.toggleStrike().run(); break;
+    case 'highlight':    ch.toggleHighlight().run(); break;
+    case 'h1':           ch.toggleHeading({ level: 1 }).run(); break;
+    case 'h2':           ch.toggleHeading({ level: 2 }).run(); break;
+    case 'h3':           ch.toggleHeading({ level: 3 }).run(); break;
+    case 'code':         ch.toggleCode().run(); break;
+    case 'codeblock':    ch.toggleCodeBlock().run(); break;
+    case 'blockquote':   ch.toggleBlockquote().run(); break;
+    case 'list':         ch.toggleBulletList().run(); break;
+    case 'olist':        ch.toggleOrderedList().run(); break;
+    case 'check':        ch.toggleTaskList().run(); break;
+    case 'sub':          ch.toggleSubscript().run(); break;
+    case 'sup':          ch.toggleSuperscript().run(); break;
+    case 'align-left':   ch.setTextAlign('left').run(); break;
+    case 'align-center': ch.setTextAlign('center').run(); break;
+    case 'align-right':  ch.setTextAlign('right').run(); break;
+    case 'link': {
+      const prev = tiptapEditor.getAttributes('link').href ?? '';
+      const url = window.prompt('URL:', prev || 'https://');
+      if (url === null) { tiptapEditor.commands.focus(); break; }
+      if (!url) { ch.unsetLink().run(); break; }
+      ch.setLink({ href: url }).run();
       break;
     }
-    case 'h1': {
-      const b = getAnchorBlock();
-      document.execCommand('formatBlock', false, b?.tagName === 'H1' ? 'p' : 'h1');
-      break;
-    }
-    case 'h2': {
-      const b = getAnchorBlock();
-      document.execCommand('formatBlock', false, b?.tagName === 'H2' ? 'p' : 'h2');
-      break;
-    }
-    case 'code':  insertCodeFmt(); break;
-    case 'list':  document.execCommand('insertUnorderedList'); break;
-    case 'check': insertCheckItem(); break;
   }
-  saveNotes();
 }
 
 document.querySelectorAll('.md-btn[data-cmd]').forEach(btn => {
@@ -2297,20 +2512,7 @@ document.querySelectorAll('.md-btn[data-cmd]').forEach(btn => {
 });
 
 document.getElementById('undo-note-btn').addEventListener('click', () => {
-  const noteId = state.activeNoteId;
-  const stack = noteUndoStacks[noteId];
-  if (!stack || stack.length < 2) return;
-  stack.pop(); // discard current state
-  const prev = stack[stack.length - 1];
-  const note = state.notes.find(n => n.id === noteId);
-  if (!note) return;
-  note.content = prev;
-  if (notesSourceMode && notesSource) {
-    notesSource.value = prev;
-  } else if (notesEditor) {
-    notesEditor.innerHTML = markdownToHtml(prev);
-  }
-  saveState();
+  tiptapEditor?.chain().focus().undo().run();
   updateUndoBtn();
 });
 
@@ -2319,37 +2521,31 @@ document.getElementById('source-btn').addEventListener('click', () => {
 });
 
 document.getElementById('clear-checked-btn').addEventListener('click', () => {
-  const checked = Array.from(notesEditor?.querySelectorAll('.check-item[data-checked="true"]') || []);
-  const struckLis = Array.from(notesEditor?.querySelectorAll('li') || []).filter(li => {
-    const text = li.querySelector('s, del, strike');
-    if (!text) return false;
-    // Only remove if the entire text content is struck (not just part of it)
-    const liText = li.textContent.trim();
-    const struckText = Array.from(li.querySelectorAll('s, del, strike')).map(s => s.textContent).join('').trim();
-    return liText && liText === struckText;
-  });
-  const total = checked.length + struckLis.length;
-  if (!total) { showToast('No completed items to clear'); return; }
-  checked.forEach(el => el.remove());
-  struckLis.forEach(li => {
-    const list = li.parentElement;
-    li.remove();
-    if (list && !list.querySelector('li')) list.remove();
-  });
+  if (!tiptapEditor) return;
+  const md = tiptapEditor.storage.markdown.getMarkdown();
+  let count = 0;
+  const filtered = md.split('\n').filter(line => {
+    if (/^- \[x\] /i.test(line.trim())) { count++; return false; }
+    return true;
+  }).join('\n');
+  if (!count) { showToast('No completed tasks to clear'); return; }
+  _notesReady = false;
+  tiptapEditor.commands.setContent(filtered);
+  _notesReady = true;
   saveNotes();
-  showToast(`✓ Cleared ${total} completed item${total > 1 ? 's' : ''}`);
+  showToast(`✓ Cleared ${count} completed task${count > 1 ? 's' : ''}`);
 });
 
 document.getElementById('copy-md-btn').addEventListener('click', () => {
-  const md = notesEditor ? htmlToMarkdown(notesEditor.innerHTML) : '';
+  const md = tiptapEditor ? tiptapEditor.storage.markdown.getMarkdown() : '';
   navigator.clipboard.writeText(md)
     .then(() => showToast('✓ Copied as Markdown'))
     .catch(() => showToast('Could not access clipboard'));
 });
 
 document.getElementById('copy-notes-btn').addEventListener('click', () => {
-  const html = notesEditor?.innerHTML ?? '';
-  const plain = notesEditor ? htmlToMarkdown(notesEditor.innerHTML) : '';
+  const html = tiptapEditor ? tiptapEditor.getHTML() : '';
+  const plain = tiptapEditor ? tiptapEditor.storage.markdown.getMarkdown() : '';
   try {
     const item = new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
@@ -2365,140 +2561,8 @@ document.getElementById('copy-notes-btn').addEventListener('click', () => {
   }
 });
 
-// Keyboard: Enter in checklist, list exit, Cmd+B/I/1/2/E/L/⇧C/S
-notesEditor?.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    saveNotes();
-    flushSyncNow();
-    return;
-  }
-  const sel = window.getSelection();
-  const anchor = sel.rangeCount ? sel.anchorNode : null;
-  const checkText = anchor?.nodeType === Node.ELEMENT_NODE ? anchor.closest?.('.check-text') : anchor?.parentElement?.closest('.check-text');
-
-  if (e.key === 'Enter' && checkText) {
-    e.preventDefault();
-    const currentItem = checkText.closest('.check-item');
-    const isEmpty = checkText.textContent.replace(/\u200b/g, '').trim() === '';
-    if (isEmpty) {
-      const p = document.createElement('p');
-      p.innerHTML = '\u200b';
-      currentItem.after(p);
-      currentItem.remove();
-      p.focus();
-      const r = document.createRange();
-      r.setStart(p.firstChild, 0);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    } else {
-      const newItem = createCheckItem('', false);
-      currentItem.after(newItem);
-      newItem.querySelector('.check-text').focus();
-      const r = document.createRange();
-      r.setStart(newItem.querySelector('.check-text'), 0);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    }
-    saveNotes();
-    return;
-  }
-
-  if (e.key === 'Enter' && !checkText) {
-    let node = sel.rangeCount ? sel.anchorNode : null;
-    let li = null;
-    while (node && node !== notesEditor) {
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'LI') { li = node; break; }
-      node = node.parentNode;
-    }
-    if (li) {
-      const isEmpty = li.textContent.replace(/\u200b/g, '').trim() === '';
-      if (isEmpty) {
-        e.preventDefault();
-        const list = li.closest('ul, ol');
-        const p = document.createElement('p');
-        p.innerHTML = '\u200b';
-        list.after(p);
-        li.remove();
-        if (!list.querySelector('li')) list.remove();
-        const r = document.createRange();
-        r.setStart(p.firstChild, 0);
-        r.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(r);
-        saveNotes();
-        return;
-      }
-      setTimeout(saveNotes, 0);
-    }
-  }
-
-  if (e.key === 'Backspace' && checkText && sel.isCollapsed) {
-    if (checkText.textContent.replace(/\u200b/g, '') === '') {
-      e.preventDefault();
-      const item = checkText.closest('.check-item');
-      const prev = item.previousSibling;
-      item.remove();
-      if (prev) {
-        const r = document.createRange();
-        r.selectNodeContents(prev);
-        r.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(r);
-      }
-      saveNotes();
-      return;
-    }
-  }
-
-  const mod = e.metaKey || e.ctrlKey;
-  if (!mod) return;
-  const map = { b: 'bold', i: 'italic', '1': 'h1', '2': 'h2', e: 'code', l: 'list' };
-  if (e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); applyCmd('check'); return; }
-  if (e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); applyCmd('strike'); return; }
-  if (map[e.key.toLowerCase()]) { e.preventDefault(); applyCmd(map[e.key.toLowerCase()]); }
-});
-
-// Migrate old plain-text / markdown content to HTML
-function markdownToHtml(text) {
-  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const inline = s => esc(s)
-    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/_(.+?)_/g,'<em>$1</em>')
-    .replace(/~~(.+?)~~/g,'<s>$1</s>')
-    .replace(/`(.+?)`/g,'<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g,'<a href="$2">$1</a>');
-  const lines = text.split('\n');
-  const out = [];
-  let inUl = false;
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) { if (inUl) { out.push('</ul>'); inUl = false; } continue; }
-    if (/^### /.test(line)) { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h3>${inline(line.slice(4))}</h3>`); continue; }
-    if (/^## /.test(line))  { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h2>${inline(line.slice(3))}</h2>`); continue; }
-    if (/^# /.test(line))   { if (inUl) { out.push('</ul>'); inUl=false; } out.push(`<h1>${inline(line.slice(2))}</h1>`); continue; }
-    if (/^---+$/.test(t))   { if (inUl) { out.push('</ul>'); inUl=false; } out.push('<hr>'); continue; }
-    if (/^- \[x\] /i.test(line)) {
-      if (inUl) { out.push('</ul>'); inUl=false; }
-      out.push(`<div class="check-item" data-checked="true" contenteditable="false"><button class="note-chk checked" type="button" contenteditable="false">✓</button><span class="check-text" contenteditable="true">${inline(line.slice(6))}</span></div>`);
-      continue;
-    }
-    if (/^- \[ \] /.test(line)) {
-      if (inUl) { out.push('</ul>'); inUl=false; }
-      out.push(`<div class="check-item" data-checked="false" contenteditable="false"><button class="note-chk" type="button" contenteditable="false"></button><span class="check-text" contenteditable="true">${inline(line.slice(6))}</span></div>`);
-      continue;
-    }
-    if (/^- /.test(line)) { if (!inUl) { out.push('<ul>'); inUl=true; } out.push(`<li>${inline(line.slice(2))}</li>`); continue; }
-    if (inUl) { out.push('</ul>'); inUl=false; }
-    out.push(`<p>${inline(line)}</p>`);
-  }
-  if (inUl) out.push('</ul>');
-  return out.join('');
-}
+// Keyboard shortcuts handled in tiptap-bundle.js (Cmd+B/I/U/1/2/3/E/L/⇧C/⇧X/K/S)
+// Source textarea Cmd+S handled above
 
 loadNotes();
 
@@ -2734,7 +2798,6 @@ document.getElementById('bm-folder-select').addEventListener('change', e => {
   loadBmPreview(e.target.value);
 });
 
-document.getElementById('bm-sync-btn').addEventListener('click', openBmModal);
 document.getElementById('bm-cancel').addEventListener('click', hideBmModal);
 document.getElementById('bm-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('bm-modal')) hideBmModal();
@@ -2754,7 +2817,6 @@ document.getElementById('bm-apply').addEventListener('click', async () => {
     const sectionNote = sectionCount > 1 ? ` across ${sectionCount} sections` : '';
     showToast(`✓ Synced ${linkCount} link${linkCount !== 1 ? 's' : ''}${sectionNote} from bookmarks`);
   }
-  document.getElementById('bm-sync-badge').style.display = '';
 });
 
 async function applyBmSync() {
@@ -2834,6 +2896,7 @@ let savedFilter = 'all';
 let savedSort = 'date'; // 'date' | 'title'
 let selectedTagsForSave = [];
 let selectedTagColor = TAG_COLORS[6];
+let editingLinkId = null;
 
 async function loadSavedLinks() {
   if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -2870,13 +2933,38 @@ function applySavedFaviconBg(val) {
   document.querySelectorAll('.fav-bg-btn').forEach(b => b.classList.toggle('active', b.dataset.bg === val));
 }
 
+let savedStatusFilter = 'all'; // 'all' | 'unread' | 'read'
+
+function makeStatusChip(label, value) {
+  const chip = document.createElement('button');
+  chip.className = 'saved-filter-chip';
+  chip.textContent = label;
+  if (savedStatusFilter === value) {
+    chip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
+  }
+  chip.addEventListener('click', () => {
+    savedStatusFilter = value;
+    renderSavedFilters();
+    renderSavedList();
+  });
+  return chip;
+}
+
 function renderSavedFilters() {
   const container = document.getElementById('saved-filters');
   container.innerHTML = '';
 
+  container.appendChild(makeStatusChip('All', 'all'));
+  container.appendChild(makeStatusChip('Unread', 'unread'));
+  container.appendChild(makeStatusChip('Read', 'read'));
+
+  const sep = document.createElement('span');
+  sep.style.cssText = 'width:1px;height:14px;background:var(--glass-border);margin:0 2px;align-self:center;flex-shrink:0;';
+  container.appendChild(sep);
+
   const allChip = document.createElement('button');
   allChip.className = 'saved-filter-chip';
-  allChip.textContent = 'All';
+  allChip.textContent = 'All tags';
   if (savedFilter === 'all') {
     allChip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
   }
@@ -2910,12 +2998,19 @@ function renderSavedList() {
   if (savedFilter !== 'all') {
     links = links.filter(l => l.tags && l.tags.includes(savedFilter));
   }
+  if (savedStatusFilter === 'unread') {
+    links = links.filter(l => !l.readAt);
+  } else if (savedStatusFilter === 'read') {
+    links = links.filter(l => !!l.readAt);
+  }
 
   if (!links.length) {
     const empty = document.createElement('div');
     empty.id = 'saved-empty';
-    if (savedFilter === 'all') {
-      empty.innerHTML = 'No saved links yet.<br><small style="opacity:0.6">Use the bookmark button in any tab to save from anywhere.</small>';
+    if (savedFilter === 'all' && savedStatusFilter === 'all') {
+      empty.innerHTML = "Kindling is empty.<br><small style=\"opacity:0.6\">Use the bookmark button in any tab to stash from anywhere.</small>";
+    } else if (savedStatusFilter !== 'all' && savedFilter === 'all') {
+      empty.innerHTML = `Nothing ${escHtml(savedStatusFilter)} yet.`;
     } else {
       empty.innerHTML = `No links tagged <strong>${escHtml(savedFilter)}</strong>.`;
     }
@@ -2929,7 +3024,7 @@ function renderSavedList() {
 
   sorted.forEach((link, idx) => {
     const item = document.createElement('a');
-    item.className = 'saved-item';
+    item.className = 'saved-item' + (link.readAt ? ' is-read' : '');
     item.href = link.url;
     item.target = '_blank';
     item.rel = 'noopener';
@@ -2950,6 +3045,12 @@ function renderSavedList() {
         ${tagsHtml ? `<div class="saved-item-tags">${tagsHtml}</div>` : ''}
       </div>
       <div class="saved-item-actions">
+        <button class="saved-item-read" title="${link.readAt ? 'Mark unread' : 'Mark read'}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="${link.readAt ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </button>
+        <button class="saved-item-edit" title="Edit tags">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
         <button class="saved-item-copy" title="Copy URL">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
@@ -2959,6 +3060,20 @@ function renderSavedList() {
       </div>
     `;
 
+    item.querySelector('.saved-item-read').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = savedData.links.find(l => l.id === link.id);
+      if (!target) return;
+      target.readAt = target.readAt ? null : Date.now();
+      persistSavedLinks();
+      renderSavedList();
+    });
+    item.querySelector('.saved-item-edit').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSaveModal({ id: link.id, url: link.url, title: link.title, tags: link.tags });
+    });
     item.querySelector('.saved-item-copy').addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -2978,10 +3093,13 @@ function renderSavedList() {
 
 // ── Save link modal ──────────────────────────────
 function openSaveModal(prefill = {}) {
-  selectedTagsForSave = [];
+  editingLinkId = prefill.id || null;
+  selectedTagsForSave = Array.isArray(prefill.tags) ? [...prefill.tags] : [];
   selectedTagColor = TAG_COLORS[6];
   document.getElementById('saved-modal-url').value = prefill.url || '';
   document.getElementById('saved-modal-title').value = prefill.title || '';
+  document.getElementById('saved-modal-heading').textContent = editingLinkId ? 'Edit Link' : 'Save Link';
+  document.getElementById('saved-modal-save').textContent = editingLinkId ? 'Save Changes' : 'Save Link';
   renderSaveTagSelector();
 
   const m = document.getElementById('saved-modal');
@@ -2999,6 +3117,7 @@ function closeSaveModal() {
   m.classList.add('closing');
   m.querySelector('.modal').classList.add('closing');
   setTimeout(() => { m.style.display = 'none'; }, 200);
+  editingLinkId = null;
 }
 
 function renderSaveTagSelector() {
@@ -3081,17 +3200,27 @@ document.getElementById('saved-modal-save').addEventListener('click', async () =
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   if (!title) title = getUrlLabel(url);
 
-  savedData.links.push({
-    id: 'sl-' + Date.now(),
-    url, title,
-    tags: [...selectedTagsForSave],
-    savedAt: Date.now(),
-  });
+  if (editingLinkId) {
+    const link = savedData.links.find(l => l.id === editingLinkId);
+    if (link) {
+      link.url = url;
+      link.title = title;
+      link.tags = [...selectedTagsForSave];
+    }
+  } else {
+    savedData.links.push({
+      id: 'sl-' + Date.now(),
+      url, title,
+      tags: [...selectedTagsForSave],
+      savedAt: Date.now(),
+    });
+  }
+  const wasEdit = !!editingLinkId;
   await persistSavedLinks();
   closeSaveModal();
   renderSavedFilters();
   renderSavedList();
-  showToast('✓ Link saved');
+  showToast(wasEdit ? '✓ Link updated' : '✓ Link saved');
 });
 
 // Listen for popup saves
@@ -3106,367 +3235,754 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
 }
 
 // ─── INIT ────────────────────────────────────────
-// ─── GITHUB GIST SYNC ────────────────────────────
-const SYNC_FILE = 'lumina-newtab.json';
+// ─── ASANA SYNC (private project, task per note) ─────────────────
+const ASANA_API = 'https://app.asana.com/api/1.0';
+const ASANA_PROJECT_NAME = 'Lumina Notes';
 let syncDebounceTimer = null;
+let syncInProgress = false;
+let lastPullTime = 0;
 
-function getSyncPat()    { return localStorage.getItem('lumina_sync_pat') || ''; }
-function getSyncGistId() { return localStorage.getItem('lumina_sync_gist_id') || ''; }
-function setSyncGistId(id) { localStorage.setItem('lumina_sync_gist_id', id); }
-function getSyncGistOwner() { return localStorage.getItem('lumina_sync_gist_owner') || ''; }
-function setSyncGistOwner(owner) { if (owner) localStorage.setItem('lumina_sync_gist_owner', owner); }
-function getSyncGistUrl() {
-  const id = getSyncGistId();
-  const owner = getSyncGistOwner();
-  if (!id) return '';
-  return owner ? `https://gist.github.com/${owner}/${id}` : `https://gist.github.com/${id}`;
+function getAsanaPat() { return (localStorage.getItem('lumina_asana_pat') || '').trim(); }
+function setAsanaPat(v) { localStorage.setItem('lumina_asana_pat', (v || '').trim()); }
+function getAsanaWorkspace() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_workspace') || 'null'); } catch { return null; }
+}
+function setAsanaWorkspace(ws) { localStorage.setItem('lumina_asana_workspace', JSON.stringify(ws || null)); }
+function getAsanaProject() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_project') || 'null'); } catch { return null; }
+}
+function setAsanaProject(p) { localStorage.setItem('lumina_asana_project', JSON.stringify(p || null)); }
+function isSyncConfigured() {
+  return !!(getAsanaPat() && getAsanaWorkspace()?.gid && getAsanaProject()?.gid);
+}
+
+function getAsanaModifiedMap() {
+  try { return JSON.parse(localStorage.getItem('lumina_asana_modified') || '{}'); } catch { return {}; }
+}
+function saveAsanaModifiedMap(m) { localStorage.setItem('lumina_asana_modified', JSON.stringify(m)); }
+function setAsanaModified(taskGid, iso) {
+  const m = getAsanaModifiedMap(); m[taskGid] = iso; saveAsanaModifiedMap(m);
 }
 
 function setSyncStatus(msg) {
   const el = document.getElementById('sync-status');
   if (el) el.textContent = msg;
+  setSyncBarText(msg);
 }
 
-function noteGistFilename(note) {
-  const name = (note.title || note.id).replace(/[/\\?%*:|"<>]/g, '-').trim() || note.id;
-  return `notes_${name}.md`;
+function setSyncBar(state, msg) {
+  const bar = document.getElementById('sync-status-bar');
+  if (!bar) return;
+  bar.className = state; // 'connected', 'disconnected', 'syncing', or ''
+  const textEl = document.getElementById('sync-status-text');
+  if (textEl && msg) textEl.textContent = msg;
+}
+function setSyncBarText(msg) {
+  const textEl = document.getElementById('sync-status-text');
+  if (textEl && msg) textEl.textContent = msg;
 }
 
-let syncInProgress = false;
-
-async function syncErrorFromResponse(resp, label) {
-  const status = resp.status;
-  let msg = `${label}: ${status}`;
-  try {
-    const body = await resp.json();
-    if (body?.message) msg += ` — ${body.message}`;
-  } catch {
-    const text = await resp.text();
-    if (text) msg += ` — ${text.slice(0, 60)}`;
+async function asanaApi(path, opts = {}) {
+  const pat = getAsanaPat();
+  if (!pat) throw new Error('No Asana token configured');
+  const headers = {
+    Authorization: `Bearer ${pat}`,
+    Accept: 'application/json',
+    ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(opts.headers || {}),
+  };
+  const url = path.startsWith('http') ? path : `${ASANA_API}${path}`;
+  const resp = await fetch(url, { ...opts, headers });
+  if (!resp.ok) {
+    let detail = '';
+    try { const j = await resp.json(); detail = j?.errors?.[0]?.message || ''; } catch {}
+    throw new Error(`Asana ${resp.status}${detail ? `: ${detail}` : ''}`);
   }
-  if (status === 401) msg += ' (Check token is valid and not expired.)';
-  if (status === 403) {
-    const reset = resp.headers.get('X-RateLimit-Reset');
-    if (reset) {
-      const resetTime = new Date(parseInt(reset, 10) * 1000);
-      const mins = Math.ceil((resetTime - Date.now()) / 60000);
-      msg += ` — Rate limit resets at ${resetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (~${mins}m)`;
-    } else {
-      msg += ' (Token needs "gist" scope, or rate limited — try again shortly.)';
+  if (resp.status === 204) return null;
+  return resp.json();
+}
+
+async function asanaMe() {
+  const j = await asanaApi('/users/me?opt_fields=gid,name,workspaces.gid,workspaces.name');
+  return j?.data || null;
+}
+
+async function asanaListProjects(workspaceGid) {
+  const j = await asanaApi(`/projects?workspace=${encodeURIComponent(workspaceGid)}&archived=false&opt_fields=gid,name,privacy_setting,owner.gid&limit=100`);
+  return j?.data || [];
+}
+
+async function asanaCreatePrivateProject(workspaceGid, name) {
+  const body = JSON.stringify({ data: { name, workspace: workspaceGid, privacy_setting: 'private' } });
+  const j = await asanaApi('/projects', { method: 'POST', body });
+  return j?.data || null;
+}
+
+async function asanaListTasks(projectGid) {
+  const fields = 'gid,name,notes,html_notes,completed,modified_at';
+  const j = await asanaApi(`/projects/${encodeURIComponent(projectGid)}/tasks?completed_since=now&opt_fields=${fields}&limit=100`);
+  return j?.data || [];
+}
+
+async function asanaGetTask(taskGid) {
+  const fields = 'gid,name,notes,html_notes,completed,modified_at';
+  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}?opt_fields=${fields}`);
+  return j?.data || null;
+}
+
+async function asanaCreateTask(projectGid, workspaceGid, name, htmlNotes) {
+  const body = JSON.stringify({ data: { name, html_notes: htmlNotes, workspace: workspaceGid, projects: [projectGid] } });
+  const j = await asanaApi('/tasks', { method: 'POST', body });
+  return j?.data || null;
+}
+
+async function asanaUpdateTask(taskGid, fields) {
+  const body = JSON.stringify({ data: fields });
+  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}`, { method: 'PUT', body });
+  return j?.data || null;
+}
+
+async function asanaCompleteTask(taskGid) {
+  return asanaUpdateTask(taskGid, { completed: true });
+}
+
+// ─── Markdown ↔ Asana HTML subset ─────────────────
+// Asana's html_notes supports: <body>, <h1>, <h2>, <ol>, <ul>, <li>, <em>, <strong>,
+// <u>, <s>, <code>, <pre>, <a>, <hr>. Anything else is rejected.
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderInline(text) {
+  let s = escapeHtml(text);
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => `<a href="${href}">${label}</a>`);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+  return s;
+}
+function markdownToAsanaHtml(md) {
+  const src = (md ?? '').toString();
+  const lines = src.split(/\r?\n/);
+  const out = [];
+  let listType = null; // 'ul' | 'ol'
+  let inFence = false;
+  let fenceBuf = [];
+  const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
+  const closeFence = () => {
+    if (!inFence) return;
+    out.push('<pre><code>' + escapeHtml(fenceBuf.join('\n')) + '</code></pre>');
+    fenceBuf = [];
+    inFence = false;
+  };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^```/.test(line.trim())) {
+      if (inFence) { closeFence(); } else { closeList(); inFence = true; }
+      continue;
     }
-  }
-  return new Error(msg);
-}
-
-function buildSyncPayload() {
-  // Main gist: state without note bodies; each note has its own gist. No base64: wallpapers are metadata-only.
-  const stateForGist = { ...state };
-  stateForGist.notes = (state.notes || []).map(n => ({ id: n.id, title: n.title, gistId: n.gistId || null, gistFilename: n.gistFilename || null }));
-  // Sync wallpaper list (id, label, emoji) but never image data — keeps gist small
-  if (Array.isArray(state.wallpapers)) {
-    stateForGist.wallpapers = state.wallpapers.map(w => ({ id: w.id, label: w.label, emoji: w.emoji }));
-  }
-  return JSON.stringify({
-    v: 1,
-    ts: Date.now(),
-    state: stateForGist,
-    saved: savedData,
-  });
-}
-
-async function applySyncPayload(json, options) {
-  let gistFiles = null;
-  let skipNoteContent = false;
-  let skipSave = false;
-  if (options != null && typeof options === 'object') {
-    if (options.skipNoteContent === true) skipNoteContent = true;
-    if (options.skipSave === true) skipSave = true;
-    if (!('skipNoteContent' in options) && !('skipSave' in options)) gistFiles = options;
-  }
-  let data;
-  try { data = JSON.parse(json); } catch { return; }
-  if (!data || data.v !== 1) return;
-
-  if (data.state) {
-    const localWallpapers = state.wallpapers;
-    Object.assign(state, data.state);
-    if (!Array.isArray(state.addressBook)) state.addressBook = [];
-    // Restore wallpaper image data from this device (gist only has id/label/emoji)
-    if (Array.isArray(state.wallpapers) && Array.isArray(localWallpapers)) {
-      const byId = new Map(localWallpapers.map(w => [w.id, w]));
-      state.wallpapers = state.wallpapers.map(w => {
-        const local = byId.get(w.id);
-        return local && (local.url || local.thumb)
-          ? { ...w, url: local.url, thumb: local.thumb }
-          : { ...w, url: w.url || '', thumb: w.thumb || '' };
-      });
+    if (inFence) { fenceBuf.push(raw); continue; }
+    if (!line.trim()) { closeList(); continue; }
+    if (/^(---+|\*\*\*+|___+)\s*$/.test(line.trim())) { closeList(); out.push('<hr/>'); continue; }
+    const h = line.match(/^(#{1,2})\s+(.*)$/);
+    if (h) { closeList(); out.push(`<${h[1].length === 1 ? 'h1' : 'h2'}>${renderInline(h[2])}</${h[1].length === 1 ? 'h1' : 'h2'}>`); continue; }
+    const task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
+    if (task) {
+      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+      const mark = task[1].toLowerCase() === 'x' ? '<s>' : '';
+      const endMark = mark ? '</s>' : '';
+      out.push(`<li>${mark}${renderInline(task[2])}${endMark}</li>`);
+      continue;
     }
-    // Note content: filled by pullSync from per-note gists
-    if (!skipNoteContent && Array.isArray(state.notes)) {
-      if (gistFiles) {
-        state.notes = state.notes.map(n => ({
-          ...n,
-          content: gistFiles[`lumina-note-${n.id}.md`]?.content ?? (n.content ?? ''),
-        }));
-      } else {
-        state.notes = state.notes.map(n => ({ ...n, content: n.content ?? '' }));
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    if (ul) {
+      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+      out.push(`<li>${renderInline(ul[1])}</li>`);
+      continue;
+    }
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
+      out.push(`<li>${renderInline(ol[1])}</li>`);
+      continue;
+    }
+    closeList();
+    out.push(renderInline(line));
+  }
+  closeFence();
+  closeList();
+  return `<body>${out.join('')}</body>`;
+}
+
+function asanaHtmlToMarkdown(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // An <li> is treated as a checked task when its only significant child is a
+  // single <s> element — this is how markdownToAsanaHtml encodes `- [x]` items,
+  // since Asana's html_notes allowlist has no checkbox markup.
+  const liStrikeChild = (li) => {
+    let strike = null;
+    for (const n of li.childNodes) {
+      if (n.nodeType === 3) { if (n.textContent.trim()) return null; continue; }
+      if (n.nodeType !== 1) continue;
+      if (n.tagName.toLowerCase() !== 's' || strike) return null;
+      strike = n;
+    }
+    return strike;
+  };
+  const walk = (node) => {
+    let md = '';
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { md += child.textContent; continue; }
+      if (child.nodeType !== 1) continue;
+      const tag = child.tagName.toLowerCase();
+      const inner = walk(child);
+      switch (tag) {
+        case 'body': md += inner; break;
+        case 'h1': md += `\n# ${inner}\n`; break;
+        case 'h2': md += `\n## ${inner}\n`; break;
+        case 'strong': case 'b': md += `**${inner}**`; break;
+        case 'em': case 'i': md += `*${inner}*`; break;
+        case 's': case 'strike': case 'del': md += `~~${inner}~~`; break;
+        case 'code':
+          if (child.parentElement?.tagName?.toLowerCase() === 'pre') { md += inner; }
+          else { md += `\`${inner}\``; }
+          break;
+        case 'pre': md += `\n\`\`\`\n${inner}\n\`\`\`\n`; break;
+        case 'u': md += `<u>${inner}</u>`; break;
+        case 'a': md += `[${inner}](${child.getAttribute('href') || ''})`; break;
+        case 'ul': {
+          const items = Array.from(child.children);
+          const strikes = items.map(liStrikeChild);
+          const isTaskList = strikes.some(Boolean);
+          if (isTaskList) {
+            md += '\n' + items.map((li, i) => {
+              const s = strikes[i];
+              return s ? `- [x] ${walk(s)}` : `- [ ] ${walk(li)}`;
+            }).join('\n') + '\n';
+          } else {
+            md += '\n' + items.map(li => `- ${walk(li)}`).join('\n') + '\n';
+          }
+          break;
+        }
+        case 'ol': md += '\n' + Array.from(child.children).map((li, i) => `${i + 1}. ${walk(li)}`).join('\n') + '\n'; break;
+        case 'li': md += inner; break;
+        case 'br': md += '\n'; break;
+        case 'hr': md += '\n---\n'; break;
+        default: md += inner;
       }
     }
-    if (!Array.isArray(state.notes) || !state.notes.length) {
-      state.notes = [{ id: 'note-1', title: 'Note 1', content: '' }];
-      state.activeNoteId = 'note-1';
-    }
-    if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
-      state.activeNoteId = state.notes[0].id;
-    }
-    renderLinks();
-    syncSettings();
-    applyVisibility();
-    applyPanelTheme(state.panelTheme || 'dark');
-    applyEngine(state.searchEngine || 'claude');
-    if (!skipSave) { saveState(); loadNotes(); }
-  }
-  if (data.saved) {
-    savedData = data.saved;
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      try { await chrome.storage.local.set({ lumina_saved: savedData }); } catch {}
-    } else {
-      localStorage.setItem('lumina_saved', JSON.stringify(savedData));
-    }
-    renderSavedFilters();
-    renderSavedList();
-  }
+    return md;
+  };
+  return walk(doc.body).replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// ─── Sync engine ─────────────────
 async function pushSync() {
-  const pat = getSyncPat();
-  if (!pat) return;
+  if (!isSyncConfigured()) return;
   if (syncInProgress) return;
   syncInProgress = true;
-  const auth = { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' };
+  setSyncBar('syncing', 'Pushing to Asana…');
   try {
+    const project = getAsanaProject();
+    const workspace = getAsanaWorkspace();
     const notes = Array.isArray(state.notes) ? state.notes : [];
-    const needGist = notes.filter(n => n && n.id && !n.gistId);
-    console.log(notes);
-    // 1. Create a separate gist for any note that doesn't have one yet
-    if (needGist.length) {
-      setSyncStatus(`Creating ${needGist.length} note gist(s)…`);
-      for (const note of needGist) {
-        const filename = noteGistFilename(note);
-        const body = (note.content ?? '').toString();
-        const resp = await fetch('https://api.github.com/gists', {
-          method: 'POST',
-          headers: auth,
-          body: JSON.stringify({
-            description: String(note.id),
-            public: false,
-            files: { [filename]: { content: body || ' ' } },
-          }),
-        });
-        if (!resp.ok) throw await syncErrorFromResponse(resp, 'Note gist');
-        const result = await resp.json();
-        if (result && result.id) {
-          note.gistId = result.id;
-          note.gistFilename = filename;
-        } else {
-          throw new Error('Note gist: no id in response');
+
+    setSyncBar('syncing', `Pushing ${notes.length} note(s)…`);
+    for (const note of notes) {
+      const htmlNotes = markdownToAsanaHtml(note.content ?? '');
+      const title = (note.title || 'Untitled').slice(0, 200);
+      if (note.asanaTaskGid) {
+        try {
+          const updated = await asanaUpdateTask(note.asanaTaskGid, { name: title, html_notes: htmlNotes });
+          if (updated?.modified_at) setAsanaModified(note.asanaTaskGid, updated.modified_at);
+        } catch (err) {
+          if (/404/.test(err.message)) {
+            const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
+            if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
+          } else { throw err; }
         }
-      }
-      saveState({ skipSchedule: true });
-    }
-
-    // 2. Push main gist (settings, links, note list with gistIds)
-    setSyncStatus('Pushing main gist…');
-    const content = buildSyncPayload();
-    const gistId = getSyncGistId();
-    const mainFiles = { [SYNC_FILE]: { content } };
-    let resp;
-    if (gistId) {
-      resp = await fetch(`https://api.github.com/gists/${gistId}`, {
-        method: 'PATCH',
-        headers: auth,
-        body: JSON.stringify({ files: mainFiles }),
-      });
-    } else {
-      resp = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: auth,
-        body: JSON.stringify({
-          description: 'Lumina New Tab Sync',
-          public: false,
-          files: mainFiles,
-        }),
-      });
-    }
-    if (!resp.ok) throw await syncErrorFromResponse(resp, 'Main gist');
-    const result = await resp.json();
-    if (!gistId && result && result.id) setSyncGistId(result.id);
-    if (result && result.owner && result.owner.login) setSyncGistOwner(result.owner.login);
-    updateSyncGistLink();
-
-    // 3. Update each note's gist with current content
-    const withGist = notes.filter(n => n && n.gistId);
-    if (withGist.length) {
-      setSyncStatus(`Updating ${withGist.length} note(s)…`);
-      for (const note of withGist) {
-        const newFilename = noteGistFilename(note);
-        const oldFilename = note.gistFilename || newFilename;
-        const fileEntry = { content: (note.content ?? '').toString() || ' ' };
-        if (oldFilename !== newFilename) fileEntry.filename = newFilename;
-        const pr = await fetch(`https://api.github.com/gists/${note.gistId}`, {
-          method: 'PATCH',
-          headers: auth,
-          body: JSON.stringify({ files: { [oldFilename]: fileEntry } }),
-        });
-        if (pr.ok) note.gistFilename = newFilename;
-        else { const e = await syncErrorFromResponse(pr, 'Note update'); setSyncStatus(e.message); showToast(`⚠ ${e.message}`); }
+      } else {
+        const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
+        if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
       }
     }
 
     saveState({ skipSchedule: true });
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSyncStatus(`Synced ${t}`);
+    setSyncBar('connected', `Synced to Asana — ${t}`);
   } catch (err) {
     setSyncStatus(`Sync error: ${err.message}`);
     showToast(`⚠ ${err.message}`);
+    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
   } finally {
     syncInProgress = false;
   }
 }
 
 async function pullSync() {
-  const pat = getSyncPat();
-  if (!pat) return;
-  const gistId = getSyncGistId();
-  if (!gistId) { await pushSync(); return; }
-  const auth = { Authorization: `Bearer ${pat}` };
+  if (!isSyncConfigured()) return;
   try {
-    setSyncStatus('Syncing…');
-    const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers: auth });
-    if (!resp.ok) throw await syncErrorFromResponse(resp, 'Pull');
-    const result = await resp.json();
-    setSyncGistOwner(result.owner?.login);
-    updateSyncGistLink();
-    const content = result.files?.[SYNC_FILE]?.content;
-    const gistFiles = result.files || {};
-    if (content) {
-     
-        // Snapshot local notes (with content) before applySyncPayload can overwrite them
-        const localNotes = (state.notes || []).map(n => ({ ...n }));
-        const localById = new Map(localNotes.map(n => [n.id, n]));
-        const localActiveNoteId = state.activeNoteId;
+    setSyncStatus('Pulling from Asana…');
+    setSyncBar('syncing', 'Pulling from Asana…');
 
-        // Parse gist note metadata separately so we can merge without losing local content
-        let gistNotesMeta = [];
-        try { gistNotesMeta = JSON.parse(content)?.state?.notes || []; } catch {}
+    const project = getAsanaProject();
+    const tasks = await asanaListTasks(project.gid);
 
-        // Apply settings/links from gist; skip save so partial state never hits localStorage
-        await applySyncPayload(content, { skipNoteContent: true, skipSave: true });
+    const localNotes = (state.notes || []).map(n => ({ ...n }));
+    const localByGid = new Map(localNotes.filter(n => n.asanaTaskGid).map(n => [n.asanaTaskGid, n]));
+    const localActiveNoteId = state.activeNoteId;
+    const mergedNotes = [];
+    const processedLocalIds = new Set();
 
-        // Immediately restore local notes — they are the source of truth for content
-        state.notes = localNotes;
-        // Restore local active note (applySyncPayload's Object.assign may have changed it)
-        state.activeNoteId = localById.has(localActiveNoteId) ? localActiveNoteId : state.notes[0]?.id;
-
-        // Merge gist metadata into local notes (update gistId/gistFilename/title from remote)
-        const remoteById = new Map(gistNotesMeta.map(n => [n.id, n]));
-        for (const note of state.notes) {
-          const remote = remoteById.get(note.id);
-          if (remote) {
-            if (remote.gistId) note.gistId = remote.gistId;
-            if (remote.gistFilename) note.gistFilename = remote.gistFilename;
-          }
-        }
-        // Add notes that exist on remote but not locally (created on another device)
-        for (const remote of gistNotesMeta) {
-          if (!localById.has(remote.id)) {
-            state.notes.push({ ...remote, content: '' });
-          }
-        }
-        if (!state.activeNoteId || !state.notes.find(n => n.id === state.activeNoteId)) {
-          state.activeNoteId = state.notes[0]?.id;
-        }
-
-        // Fetch content from per-note gists only when the note is new (from another device)
-        // or has no local content. Local edits are always preferred to avoid overwriting
-        // unsaved changes when the user refreshes before the 3-second push debounce fires.
-        for (const note of state.notes) {
-          if (!note.gistId) continue;
-          const hasLocalContent = localById.has(note.id) && localById.get(note.id).content;
-          if (hasLocalContent) continue;
-          try {
-            const r = await fetch(`https://api.github.com/gists/${note.gistId}`, { headers: auth });
-            const res = await r.json();
-            const file = res.files?.[note.gistFilename] || res.files?.[noteGistFilename(note)] || (res.files && Object.values(res.files)[0]);
-            if (file?.content != null) note.content = file.content;
-          } catch {}
-        }
-
-        saveState();
-        loadNotes();
-      
-      lastPullTime = Date.now();
-      const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setSyncStatus(`Synced ${t}`);
-    } else {
-      await pushSync();
+    for (const task of tasks) {
+      if (task.completed) continue; // completed tasks = deleted notes
+      const matched = localByGid.get(task.gid);
+      const remoteMd = task.html_notes ? asanaHtmlToMarkdown(task.html_notes) : (task.notes || '');
+      if (matched) {
+        matched.title = task.name || matched.title;
+        matched.content = remoteMd;
+        matched.asanaTaskGid = task.gid;
+        setAsanaModified(task.gid, task.modified_at);
+        mergedNotes.push(matched);
+        processedLocalIds.add(matched.id);
+      } else {
+        const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        mergedNotes.push({ id, title: task.name || 'Untitled', content: remoteMd, asanaTaskGid: task.gid });
+        setAsanaModified(task.gid, task.modified_at);
+      }
     }
+
+    // Keep local-only notes that were never pushed
+    for (const note of localNotes) {
+      if (!processedLocalIds.has(note.id) && !note.asanaTaskGid) mergedNotes.push(note);
+    }
+
+    state.notes = mergedNotes.length ? mergedNotes : [{ id: 'note-1', title: 'Note 1', content: '' }];
+    if (state.notes.find(n => n.id === localActiveNoteId)) state.activeNoteId = localActiveNoteId;
+    else state.activeNoteId = state.notes[0].id;
+
+    saveState();
+    loadNotes();
+
+    // Push back so any local-only notes become tasks
+    await pushSync();
+
+    lastPullTime = Date.now();
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus(`Synced ${t}`);
+    setSyncBar('connected', `Synced with Asana — ${t}`);
   } catch (err) {
     setSyncStatus(`Sync error: ${err.message}`);
     showToast(`⚠ ${err.message}`);
+    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
   }
 }
 
+async function handleNoteDeletion(asanaTaskGid) {
+  if (!asanaTaskGid || !isSyncConfigured()) return;
+  try { await asanaCompleteTask(asanaTaskGid); } catch {}
+}
+
+function buildQuickLinksMarkdown() {
+  const links = (state.links || []).filter(l => !l.fromBookmark);
+  let md = '# Quick Links\n\n';
+  if (!links.length) return md + '_No links_\n';
+  for (const link of links) {
+    md += `- [${link.label}](${link.url})\n`;
+  }
+  return md;
+}
+
+function buildSavedLinksMarkdown() {
+  const links = savedData?.links || [];
+  const tags = savedData?.tags || [];
+  if (!links.length) return '# Kindling\n\n_Empty_\n';
+
+  let md = '# Kindling\n\n';
+
+  // Group by tags
+  const tagMap = new Map();
+  const untagged = [];
+  for (const link of links) {
+    if (!link.tags?.length) { untagged.push(link); continue; }
+    for (const tag of link.tags) {
+      if (!tagMap.has(tag)) tagMap.set(tag, []);
+      tagMap.get(tag).push(link);
+    }
+  }
+
+  // Render tagged sections (in tag definition order)
+  for (const tag of tags) {
+    const items = tagMap.get(tag.name);
+    if (!items?.length) continue;
+    md += `## ${tag.name}\n\n`;
+    for (const link of items) {
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  // Render any tags not in the tags list
+  for (const [tagName, items] of tagMap) {
+    if (tags.find(t => t.name === tagName)) continue;
+    md += `## ${tagName}\n\n`;
+    for (const link of items) {
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  // Render untagged
+  if (untagged.length) {
+    md += `## Untagged\n\n`;
+    for (const link of untagged) {
+      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
+    }
+    md += '\n';
+  }
+
+  return md.trimEnd() + '\n';
+}
+
 function schedulePush() {
-  if (!getSyncPat()) return;
+  if (!isSyncConfigured()) return;
   clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(pushSync, 3000);
 }
 
 function flushSyncNow() {
-  if (!getSyncPat()) return;
+  if (!isSyncConfigured()) return;
   clearTimeout(syncDebounceTimer);
   syncDebounceTimer = null;
   pushSync();
 }
 
-function updateSyncGistLink() {
-  const linkEl = document.getElementById('sync-gist-link');
-  if (!linkEl) return;
-  const url = getSyncGistUrl();
-  if (url) {
-    linkEl.href = url;
-    linkEl.target = '_blank';
-    linkEl.rel = 'noopener';
-    linkEl.style.display = '';
-  } else {
-    linkEl.style.display = 'none';
+function downloadTextFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function replaceOptions(select, items, currentGid) {
+  while (select.firstChild) select.removeChild(select.firstChild);
+  for (const item of items) {
+    const opt = document.createElement('option');
+    opt.value = item.value;
+    opt.textContent = item.label;
+    if (item.value === currentGid) opt.selected = true;
+    select.appendChild(opt);
   }
 }
 
+async function populateWorkspaceSelect(select) {
+  const pat = getAsanaPat();
+  if (!pat) return;
+  try {
+    const me = await asanaMe();
+    const current = getAsanaWorkspace()?.gid || '';
+    const items = (me?.workspaces || []).map(w => ({ value: w.gid, label: w.name }));
+    replaceOptions(select, items, current);
+  } catch {
+    replaceOptions(select, [{ value: '', label: '(token invalid)' }], '');
+  }
+}
+
+async function ensureAsanaProject() {
+  const project = getAsanaProject();
+  const workspace = getAsanaWorkspace();
+  if (!workspace?.gid) throw new Error('Pick a workspace first');
+  if (project?.gid) {
+    try {
+      const fresh = await asanaApi(`/projects/${project.gid}?opt_fields=gid,name,privacy_setting`);
+      if (fresh?.data?.gid) return fresh.data;
+    } catch {
+      // project gone / inaccessible — fall through and recreate
+    }
+  }
+  const created = await asanaCreatePrivateProject(workspace.gid, ASANA_PROJECT_NAME);
+  if (created?.gid) { setAsanaProject({ gid: created.gid, name: created.name }); return created; }
+  throw new Error('Could not create Lumina Notes project');
+}
+
 function initSync() {
-  const patInput = document.getElementById('sync-pat');
-  patInput.value = getSyncPat();
-  patInput.addEventListener('change', () => {
-    const val = patInput.value.trim();
-    localStorage.setItem('lumina_sync_pat', val);
-    setSyncStatus(val ? 'Token saved — click Sync to pull' : '');
+  const patInput = document.getElementById('asana-pat');
+  const workspaceSelect = document.getElementById('asana-workspace-select');
+  const connectBtn = document.getElementById('asana-connect-btn');
+  const disconnectBtn = document.getElementById('asana-disconnect-btn');
+  const projectName = document.getElementById('asana-project-name');
+  const exportLinksBtn = document.getElementById('asana-export-links-btn');
+  const exportSettingsBtn = document.getElementById('asana-export-settings-btn');
+
+  if (!patInput) return;
+
+  patInput.value = getAsanaPat();
+  const proj = getAsanaProject();
+  if (projectName) projectName.textContent = proj?.name || '(not connected)';
+  if (getAsanaWorkspace()?.gid && workspaceSelect) populateWorkspaceSelect(workspaceSelect);
+
+  patInput.addEventListener('change', async () => {
+    setAsanaPat(patInput.value);
+    if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
+    checkAsanaConnection();
   });
 
-  // Pull only happens when the user clicks Sync Now — never automatically on load
+  workspaceSelect?.addEventListener('change', () => {
+    const opt = workspaceSelect.selectedOptions[0];
+    if (opt?.value) setAsanaWorkspace({ gid: opt.value, name: opt.textContent });
+    setAsanaProject(null);
+    if (projectName) projectName.textContent = '(not connected)';
+    checkAsanaConnection();
+  });
+
+  connectBtn?.addEventListener('click', async () => {
+    try {
+      setSyncBar('syncing', 'Connecting to Asana…');
+      if (!getAsanaPat()) throw new Error('Enter a Personal Access Token');
+      const me = await asanaMe();
+      const workspaces = me?.workspaces || [];
+      if (!workspaces.length) throw new Error('No workspaces on this account');
+      let selected = getAsanaWorkspace();
+      if (!selected?.gid) {
+        const first = workspaces[0];
+        selected = { gid: first.gid, name: first.name };
+        setAsanaWorkspace(selected);
+      }
+      if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
+      const project = await ensureAsanaProject();
+      if (projectName) projectName.textContent = project.name;
+      setSyncBar('connected', `Connected — ${project.name}`);
+      setSyncStatus('Ready — click Sync to pull');
+    } catch (err) {
+      setSyncBar('disconnected', err.message);
+      showToast(`⚠ ${err.message}`);
+    }
+  });
+
+  disconnectBtn?.addEventListener('click', () => {
+    setAsanaPat('');
+    setAsanaWorkspace(null);
+    setAsanaProject(null);
+    patInput.value = '';
+    if (workspaceSelect) replaceOptions(workspaceSelect, [], '');
+    if (projectName) projectName.textContent = '(not connected)';
+    setSyncBar('disconnected', 'Disconnected from Asana');
+    setSyncStatus('');
+  });
+
   document.getElementById('sync-now-btn').addEventListener('click', () => {
-    if (!getSyncPat()) { setSyncStatus('Add a token first'); return; }
+    if (!isSyncConfigured()) { setSyncStatus('Connect to Asana first'); return; }
     clearTimeout(syncDebounceTimer);
     syncDebounceTimer = null;
     pullSync();
   });
-  updateSyncGistLink();
-  if (getSyncPat()) setSyncStatus('Ready — click Sync to pull');
-  // Push on tab close / navigate away so no edits are lost
+
+  exportLinksBtn?.addEventListener('click', () => {
+    downloadTextFile('lumina-links.md', buildQuickLinksMarkdown() + '\n---\n\n' + buildSavedLinksMarkdown(), 'text/markdown');
+  });
+  exportSettingsBtn?.addEventListener('click', () => {
+    const payload = { exportedAt: new Date().toISOString(), state, saved: savedData };
+    downloadTextFile('lumina-settings.json', JSON.stringify(payload, null, 2), 'application/json');
+  });
+
+  if (isSyncConfigured()) setSyncStatus('Ready — click Sync to pull');
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSyncNow();
+    else if (document.visibilityState === 'visible' && isSyncConfigured() && Date.now() - lastPullTime > 30_000) pullSync();
   });
+  window.addEventListener('blur', () => { flushSyncNow(); });
   window.addEventListener('pagehide', () => { flushSyncNow(); });
+  checkAsanaConnection();
+}
+
+async function checkAsanaConnection() {
+  if (!getAsanaPat()) {
+    setSyncBar('disconnected', 'Asana sync not configured — add your Personal Access Token');
+    return;
+  }
+  try {
+    const me = await asanaMe();
+    if (!me?.gid) throw new Error('Token rejected');
+    if (!getAsanaWorkspace()?.gid) {
+      setSyncBar('disconnected', 'Pick a workspace to finish connecting');
+      return;
+    }
+    if (!getAsanaProject()?.gid) {
+      setSyncBar('disconnected', 'Click Connect to create the Lumina Notes project');
+      return;
+    }
+    setSyncBar('connected', `Connected as ${me.name}`);
+  } catch (err) {
+    setSyncBar('disconnected', `Cannot reach Asana — ${err.message.slice(0, 60)}`);
+  }
+}
+
+// ─── SETUP WIZARD ───────────────────────────────
+function isFirstInstall() {
+  return !localStorage.getItem('lumina_setup_done');
+}
+
+function showSetupOverlay() {
+  const overlay = document.getElementById('setup-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  goToSetupStep('welcome');
+}
+
+function hideSetupOverlay() {
+  const overlay = document.getElementById('setup-overlay');
+  if (overlay) overlay.style.display = 'none';
+  localStorage.setItem('lumina_setup_done', '1');
+}
+
+function goToSetupStep(stepName) {
+  const steps = document.querySelectorAll('.setup-step');
+  steps.forEach(s => {
+    s.classList.toggle('active', s.dataset.step === stepName);
+  });
+}
+
+function initSetupWizard() {
+  const connectBtn = document.getElementById('setup-connect-btn');
+  const skipBtn = document.getElementById('setup-skip-btn');
+  const testBtn = document.getElementById('setup-test-btn');
+  const backBtn = document.getElementById('setup-back-btn');
+  const importBtn = document.getElementById('setup-import-btn');
+  const freshBtn = document.getElementById('setup-fresh-btn');
+  const doneBtn = document.getElementById('setup-done-btn');
+
+  if (!connectBtn) return;
+
+  connectBtn.addEventListener('click', () => goToSetupStep('configure'));
+  skipBtn.addEventListener('click', () => hideSetupOverlay());
+  backBtn.addEventListener('click', () => goToSetupStep('welcome'));
+
+  testBtn.addEventListener('click', async () => {
+    const patInput = document.getElementById('setup-asana-pat');
+    const statusEl = document.getElementById('setup-test-status');
+    const pat = (patInput?.value || '').trim();
+    if (!pat) {
+      statusEl.textContent = 'Please paste a Personal Access Token';
+      statusEl.className = 'setup-test-status error';
+      return;
+    }
+    statusEl.textContent = 'Connecting to Asana…';
+    statusEl.className = 'setup-test-status testing';
+    try {
+      setAsanaPat(pat);
+      const me = await asanaMe();
+      if (!me?.workspaces?.length) throw new Error('No workspaces on this account');
+      const first = me.workspaces[0];
+      setAsanaWorkspace({ gid: first.gid, name: first.name });
+      const project = await ensureAsanaProject();
+      const settingsPat = document.getElementById('asana-pat');
+      if (settingsPat) settingsPat.value = pat;
+      statusEl.textContent = `Connected — project "${project.name}" ready`;
+      statusEl.className = 'setup-test-status success';
+      setTimeout(() => goToSetupStep('import'), 600);
+    } catch (err) {
+      statusEl.textContent = `Connection failed — ${err.message.slice(0, 80)}`;
+      statusEl.className = 'setup-test-status error';
+    }
+  });
+
+  importBtn.addEventListener('click', async () => {
+    const desc = document.getElementById('setup-done-desc');
+    try {
+      await pushSync();
+      if (desc) desc.textContent = 'Your existing notes have been pushed to Asana as tasks. Enjoy your new tab!';
+    } catch {
+      if (desc) desc.textContent = 'Push had some issues, but Lumina is ready. You can sync again from Settings.';
+    }
+    goToSetupStep('done');
+  });
+
+  freshBtn.addEventListener('click', () => {
+    const desc = document.getElementById('setup-done-desc');
+    if (desc) desc.textContent = 'Lumina is connected to Asana and ready to sync. Enjoy your new tab!';
+    goToSetupStep('done');
+  });
+
+  doneBtn.addEventListener('click', () => hideSetupOverlay());
+}
+
+// ─── SETTINGS REVISION ARCHIVE ──────────────────
+const SETTINGS_ARCHIVE_KEY = 'lumina_settings_archive';
+const MAX_SETTINGS_REVISIONS = 30;
+
+function getSettingsArchive() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_ARCHIVE_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function archiveCurrentSettings() {
+  const archive = getSettingsArchive();
+  const snapshot = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    timestamp: Date.now(),
+    data: JSON.parse(JSON.stringify(state)),
+  };
+  archive.unshift(snapshot);
+  if (archive.length > MAX_SETTINGS_REVISIONS) archive.length = MAX_SETTINGS_REVISIONS;
+  localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive));
+}
+
+function restoreSettingsRevision(revisionId) {
+  const archive = getSettingsArchive();
+  const rev = archive.find(r => r.id === revisionId);
+  if (!rev || !rev.data) return false;
+  state = rev.data;
+  saveState({ skipSchedule: true });
+  return true;
+}
+
+function renderSettingsArchive() {
+  const container = document.getElementById('settings-archive-list');
+  if (!container) return;
+  const archive = getSettingsArchive();
+  if (!archive.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No saved revisions yet. Settings are archived automatically when changes are made.</p>';
+    return;
+  }
+  container.innerHTML = archive.map(rev => {
+    const d = new Date(rev.timestamp);
+    const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const noteCount = Array.isArray(rev.data.notes) ? rev.data.notes.length : 0;
+    const linkCount = Array.isArray(rev.data.links) ? rev.data.links.length : 0;
+    return `<div class="settings-rev-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div>
+        <div style="font-size:0.85rem;color:var(--text);">${dateStr} at ${timeStr}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);">${noteCount} notes · ${linkCount} links · ${rev.data.themes?.join(', ') || 'default'}</div>
+      </div>
+      <button class="settings-rev-restore" data-rev-id="${rev.id}" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:0.8rem;cursor:pointer;">Restore</button>
+    </div>`;
+  }).join('');
+  container.querySelectorAll('.settings-rev-restore').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.revId;
+      if (confirm('Restore this settings revision? Your current settings will be replaced.')) {
+        if (restoreSettingsRevision(id)) {
+          location.reload();
+        }
+      }
+    });
+  });
+}
+
+function fetchPublicIP() {
+  fetch('https://api.ipify.org?format=json')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('public-ip');
+      if (el && data.ip) el.textContent = data.ip;
+    })
+    .catch(() => {});
 }
 
 function init() {
@@ -3485,15 +4001,11 @@ function init() {
   syncSettings();
   applyVisibility();
   applyPanelTheme(state.panelTheme || 'dark');
+  applySettingsTheme(state.settingsTheme || 'dark');
 
   applyEngine(state.searchEngine || 'claude');
   fetchWeather();
-
-  // Show badge if bookmark sync is configured
-  if (state.bmFolderId) document.getElementById('bm-sync-badge').style.display = '';
-
-  // Auto-sync bookmarks on open
-  if (state.bmAutoSync && state.bmFolderId) applyBmSync();
+  fetchPublicIP();
 
   // Restore sidebar states
   if (state.notesPanelOpen !== false) openNotesPanel();
@@ -3507,6 +4019,13 @@ function init() {
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
+
+  // Setup wizard for first install
+  initSetupWizard();
+  if (isFirstInstall()) showSetupOverlay();
+
+  // Settings archive
+  renderSettingsArchive();
 }
 
 window.addEventListener('resize', () => { resizeCanvas(); startBg(); });

@@ -44,17 +44,13 @@ function getEntryById(entries, id) {
   return entries.find((e) => e && e.id === id) || null;
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  refreshContextMenu();
-});
-
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes[STORAGE_KEY]) {
     buildContextMenu(changes[STORAGE_KEY].newValue || []);
   }
 });
 
-// Build menu when service worker starts (e.g. after browser restart) so menu is never stale
+// Build menu once when service worker starts (covers both install and restart)
 refreshContextMenu();
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {

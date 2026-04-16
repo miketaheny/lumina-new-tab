@@ -36,6 +36,7 @@
       font-family: 'Inter', sans-serif;
       color: var(--text);
       overflow-x: hidden;
+      background: #0c091a;
     }
 
     /* ─── BACKGROUND CANVAS ─── */
@@ -54,7 +55,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.6);
     }
 
     #bg-wallpaper.active {
@@ -85,8 +86,8 @@
     }
 
     body.wallpaper-active #search-form {
-      background: rgba(0, 0, 0, 0.35);
-      border-color: rgba(255, 255, 255, 0.2);
+      background: transparent;
+      border-color: rgba(255, 255, 255, 0.18);
     }
 
     body.wallpaper-active #search-input {
@@ -129,27 +130,26 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      max-width: 1600px;
+      max-width: 900px;
       width: 100%;
       margin: 0 auto;
-      padding: 0 24px 60px;
-      transition: padding-right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0 32px 60px;
+      transition: margin 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     body.notes-open #app {
-      padding-right: calc(clamp(340px, 33.33vw, 580px) + 24px);
+      margin-right: clamp(340px, 40vw, 800px);
     }
 
     @media (max-width: 768px) {
       body.notes-open #app {
-        padding-right: 24px;
+        margin-right: auto;
       }
     }
 
     /* ─── TOP BAR ─── */
     #topbar {
       width: 100%;
-      max-width: 860px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -223,15 +223,16 @@
 
     #topbar-actions {
       display: flex;
-      gap: 8px;
-      align-items: center;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-end;
     }
 
     .icon-btn {
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       backdrop-filter: var(--blur);
-      color: var(--text-muted);
+      color: rgba(255, 255, 255, 0.55);
       cursor: pointer;
       width: 36px;
       height: 36px;
@@ -292,18 +293,17 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      background: rgba(255, 255, 255, 0.09);
-      border: 1px solid var(--glass-border);
-      backdrop-filter: blur(28px) saturate(1.4);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 18px;
       padding: 6px 6px 6px 20px;
       transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
     }
 
     #search-form:focus-within {
-      border-color: rgba(167, 139, 250, 0.5);
-      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1), 0 8px 40px rgba(0, 0, 0, 0.25);
-      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(167, 139, 250, 0.3);
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.09);
     }
 
     #claude-logo {
@@ -412,7 +412,7 @@
     #search-divider {
       width: 1px;
       height: 18px;
-      background: var(--glass-border);
+      background: rgba(255, 255, 255, 0.1);
       flex-shrink: 0;
     }
 
@@ -508,8 +508,8 @@
       align-items: center;
       justify-content: center;
       font-size: 16px;
-      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
-      box-shadow: 0 2px 12px rgba(167, 139, 250, 0.35);
+      transition: background 0.2s, transform 0.15s;
+      box-shadow: none;
     }
 
     #search-btn:hover {
@@ -543,9 +543,8 @@
     }
 
     #add-link-btn {
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      backdrop-filter: var(--blur);
+      background: transparent;
+      border: 1px solid transparent;
       color: var(--text-muted);
       cursor: pointer;
       padding: 6px 14px;
@@ -560,7 +559,7 @@
     }
 
     #add-link-btn:hover {
-      background: var(--glass-hover);
+      background: rgba(255, 255, 255, 0.06);
       color: var(--text);
     }
 
@@ -595,8 +594,8 @@
     }
 
     .ql-item {
-      /* background: var(--glass); border: 1px solid var(--glass-border); */
-      backdrop-filter: var(--blur);
+      background: transparent;
+      border: none;
       border-radius: var(--r);
       padding: 5px 10px;
       display: flex;
@@ -605,26 +604,16 @@
       cursor: pointer;
       flex: 0 0 auto;
       min-width: 180px;
-      transition: background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      transition: background 0.2s, transform 0.2s;
       text-decoration: none;
       position: relative;
       overflow: hidden;
       animation: cardIn 0.35s ease both;
     }
 
-    .ql-item::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      /* background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent); */
-      pointer-events: none;
-    }
-
     .ql-item:hover {
-      background: var(--glass-hover);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      border-color: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.06);
+      transform: translateY(-1px);
     }
 
     .ql-item:active {
@@ -692,7 +681,7 @@
     }
 
     .ql-action-btn {
-      background: rgba(0, 0, 0, 0.25);
+      background: transparent;
       border: none;
       width: 24px;
       height: 24px;
@@ -707,12 +696,12 @@
     }
 
     .ql-action-btn:hover {
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(255, 255, 255, 0.08);
       color: var(--text);
     }
 
     .ql-action-btn.delete:hover {
-      background: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.15);
       color: #fca5a5;
     }
 
@@ -733,7 +722,6 @@
 
     .ql-item.dragging {
       opacity: 0.4;
-      border-style: dashed;
     }
 
     .ql-item.drag-over {
@@ -840,10 +828,10 @@
 
     .ql-section-label {
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--text-muted);
+      color: rgba(255, 255, 255, 0.42);
       outline: none;
       border: none;
       background: none;
@@ -906,7 +894,7 @@
     }
 
     .ql-section-btn:hover {
-      background: var(--glass);
+      background: rgba(255, 255, 255, 0.06);
       color: var(--text);
     }
 
@@ -921,7 +909,7 @@
       padding: 40px;
       color: var(--text-muted);
       font-size: 13px;
-      border: 1px dashed var(--glass-border);
+      border: 1px dashed rgba(255, 255, 255, 0.1);
       border-radius: var(--r);
       display: none;
     }
@@ -1131,6 +1119,46 @@
       transform: scale(1);
     }
 
+    #settings-panel.settings-light {
+      --text: rgba(15, 10, 35, 0.82);
+      --text-muted: rgba(15, 10, 35, 0.5);
+      --glass: rgba(0, 0, 0, 0.04);
+      --glass-border: rgba(0, 0, 0, 0.1);
+      --glass-hover: rgba(0, 0, 0, 0.07);
+      --accent: #7c5cbf;
+      background: rgba(248, 247, 255, 0.99);
+    }
+    #settings-panel.settings-light #settings-close-btn {
+      color: rgba(15, 10, 35, 0.5);
+    }
+    #settings-panel.settings-light #settings-close-btn:hover {
+      color: rgba(15, 10, 35, 0.82);
+    }
+    #settings-panel.settings-light input {
+      background: rgba(0, 0, 0, 0.04) !important;
+      border-color: rgba(0, 0, 0, 0.12) !important;
+      color: rgba(15, 10, 35, 0.82) !important;
+    }
+    #settings-panel.settings-light .panel-theme-btn,
+    #settings-panel.settings-light .intensity-btn,
+    #settings-panel.settings-light .bg-mode-tab {
+      color: rgba(15, 10, 35, 0.5);
+      border-color: rgba(0, 0, 0, 0.1);
+      background: rgba(0, 0, 0, 0.03);
+    }
+    #settings-panel.settings-light .bg-mode-tab.active {
+      background: rgba(124, 92, 191, 0.15) !important;
+      color: rgba(15, 10, 35, 0.82) !important;
+    }
+    #settings-panel.settings-light .intensity-btn.active {
+      background: rgba(124, 92, 191, 0.15);
+      border-color: rgba(124, 92, 191, 0.4);
+      color: rgba(15, 10, 35, 0.82);
+    }
+    #settings-panel.settings-light #settings-version {
+      color: rgba(15, 10, 35, 0.3);
+    }
+
     #settings-header {
       display: flex;
       align-items: center;
@@ -1220,7 +1248,7 @@
       border-radius: 12px;
       padding: 10px 12px;
       cursor: pointer;
-      border: 2px solid transparent;
+      border: 2px solid rgba(255, 255, 255, 0.15);
       transition: all 0.2s;
       position: relative;
       overflow: hidden;
@@ -1290,6 +1318,12 @@
       background: rgba(167, 139, 250, 0.2);
       border-color: var(--accent);
       color: var(--text);
+    }
+
+    .bg-mode-tab.active {
+      background: rgba(167, 139, 250, 0.2) !important;
+      color: var(--text) !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
     }
 
     .bg-mode-pane {
@@ -1629,23 +1663,6 @@
       align-items: center;
       gap: 8px;
       margin-top: 6px;
-    }
-
-    .focus-api-btn {
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      color: var(--text-muted);
-      border-radius: 8px;
-      padding: 5px 10px;
-      font-size: 11px;
-      font-family: 'Inter', sans-serif;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .focus-api-btn:hover {
-      background: var(--glass-hover);
-      color: var(--text);
     }
 
     .focus-reset-btn {
@@ -2060,6 +2077,147 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    /* ─── SETUP / WELCOME OVERLAY ─── */
+    #setup-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      background: #0c091a;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity 0.5s;
+    }
+    #setup-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #setup-card {
+      width: 420px;
+      max-width: 90vw;
+      text-align: center;
+    }
+    .setup-step {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      animation: fadeUp 0.4s ease both;
+    }
+    .setup-step.active { display: flex; }
+    .setup-icon {
+      width: 80px; height: 80px;
+      border-radius: 24px;
+      background: rgba(167, 139, 250, 0.1);
+      border: 1px solid rgba(167, 139, 250, 0.2);
+      display: flex; align-items: center; justify-content: center;
+      color: #a78bfa;
+      margin-bottom: 24px;
+    }
+    .setup-icon.connected {
+      background: rgba(74, 222, 128, 0.1);
+      border-color: rgba(74, 222, 128, 0.2);
+      color: #4ade80;
+    }
+    .setup-icon.done {
+      background: rgba(251, 191, 36, 0.1);
+      border-color: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+    .setup-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.88);
+      margin-bottom: 10px;
+    }
+    .setup-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+      line-height: 1.7;
+      max-width: 340px;
+      margin-bottom: 28px;
+    }
+    .setup-desc strong { color: rgba(255, 255, 255, 0.7); }
+    .setup-fields {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .setup-field label {
+      display: block;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .setup-field input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: rgba(255, 255, 255, 0.8);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setup-field input:focus {
+      border-color: rgba(167, 139, 250, 0.4);
+    }
+    .setup-field input::placeholder {
+      color: rgba(255, 255, 255, 0.2);
+    }
+    #setup-test-status {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      min-height: 20px;
+      margin-bottom: 12px;
+      transition: color 0.2s;
+    }
+    #setup-test-status.success { color: #4ade80; }
+    #setup-test-status.error { color: #f87171; }
+    #setup-test-status.testing { color: #60a5fa; }
+    .setup-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .setup-btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+    .setup-btn.primary {
+      background: #a78bfa;
+      color: #0c091a;
+    }
+    .setup-btn.primary:hover {
+      background: #c4b5fd;
+      transform: translateY(-1px);
+    }
+    .setup-btn.ghost {
+      background: transparent;
+      color: rgba(255, 255, 255, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .setup-btn.ghost:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.6);
+    }
+
     /* ─── SCROLLBAR (settings panel) ─── */
     ::-webkit-scrollbar {
       width: 6px;
@@ -2092,20 +2250,20 @@
       top: 0;
       bottom: 0;
       z-index: 90;
-      width: clamp(340px, 33.33vw, 580px);
+      width: clamp(340px, 40vw, 800px);
       max-width: 100vw;
       /* panel-scoped CSS variables — dark by default */
-      --text: rgba(255, 255, 255, 0.72);
-      --text-muted: rgba(255, 255, 255, 0.42);
-      --glass: rgba(255, 255, 255, 0.07);
-      --glass-border: rgba(255, 255, 255, 0.13);
-      --glass-hover: rgba(255, 255, 255, 0.12);
-      --p-bg: rgba(12, 9, 26, 0.97);
+      --text: rgba(255, 255, 255, 0.88);
+      --text-muted: rgba(255, 255, 255, 0.55);
+      --glass: rgba(255, 255, 255, 0.08);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --glass-hover: rgba(255, 255, 255, 0.13);
+      --p-bg: rgba(24, 20, 44, 0.97);
       --p-caret: white;
-      --p-placeholder: rgba(255, 255, 255, 0.18);
-      --p-code-bg: rgba(255, 255, 255, 0.08);
-      --p-em: rgba(255, 255, 255, 0.58);
-      --p-chk-border: rgba(255, 255, 255, 0.28);
+      --p-placeholder: rgba(255, 255, 255, 0.25);
+      --p-code-bg: rgba(255, 255, 255, 0.09);
+      --p-em: rgba(255, 255, 255, 0.7);
+      --p-chk-border: rgba(255, 255, 255, 0.32);
       background: var(--p-bg);
       border-left: 1px solid var(--glass-border);
       backdrop-filter: blur(30px);
@@ -2150,6 +2308,31 @@
     #notes-panel.open {
       transform: translateX(0);
     }
+
+    #sync-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 16px;
+      border-top: 1px solid var(--glass-border);
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: opacity 0.2s;
+    }
+    #sync-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: rgba(251,191,36,0.7);
+      transition: background 0.3s;
+    }
+    #sync-status-bar.connected #sync-status-dot { background: rgba(74,222,128,0.85); }
+    #sync-status-bar.disconnected #sync-status-dot { background: rgba(251,80,80,0.75); }
+    #sync-status-bar.syncing #sync-status-dot { background: rgba(96,165,250,0.8); animation: pulse-dot 1s infinite; }
+    @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
     @media (max-width: 768px) {
       #notes-panel {
@@ -2325,9 +2508,68 @@
       display: flex;
     }
 
+    /* Bookmarks tree */
+    #bm-tree { font-size: 12px; color: var(--text); }
+    .bm-node { display: flex; flex-direction: column; }
+    .bm-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 6px; border-radius: 6px;
+      cursor: pointer; user-select: none;
+      color: var(--text); line-height: 1.3;
+    }
+    .bm-row:hover { background: var(--glass); }
+    .bm-chevron {
+      width: 12px; height: 12px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text-muted); transition: transform 0.12s;
+    }
+    .bm-chevron.collapsed { transform: rotate(-90deg); }
+    .bm-chevron.empty { visibility: hidden; }
+    .bm-icon {
+      width: 14px; height: 14px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .bm-icon img { width: 14px; height: 14px; border-radius: 2px; }
+    .bm-label {
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bm-folder-label { font-weight: 500; color: var(--text); }
+    .bm-children { margin-left: 14px; border-left: 1px solid var(--glass-border); padding-left: 4px; }
+    .bm-children.collapsed { display: none; }
+    .bm-actions {
+      display: none; gap: 2px; flex-shrink: 0;
+    }
+    .bm-row:hover .bm-actions { display: inline-flex; }
+    .bm-act {
+      width: 18px; height: 18px; padding: 0;
+      background: none; border: none; border-radius: 4px;
+      color: var(--text-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .bm-act:hover { background: var(--glass); color: var(--text); }
+    .bm-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 11px; }
+
+    /* Quick links section inside Bookmarks tab */
+    .bm-ql-wrap { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); }
+    .bm-ql-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 6px 6px; font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+    .bm-ql-add {
+      width: 18px; height: 18px; padding: 0;
+      background: none; border: none; border-radius: 4px;
+      color: var(--text-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .bm-ql-add:hover { background: var(--glass); color: var(--text); }
+    .bm-ql-empty { padding: 6px 10px; color: var(--text-muted); font-size: 11px; font-style: italic; }
+
     /* Notes toolbar */
     #notes-toolbar {
       display: flex;
+      flex-wrap: wrap;
       gap: 2px;
       align-items: center;
       padding: 10px 16px 8px;
@@ -2361,11 +2603,10 @@
       color: var(--accent);
     }
 
-    /* Notes: single-pane inline live (Typora/Obsidian style), stored as markdown */
+    /* Notes: Tiptap editor wrapper */
     #notes-editor {
       flex: 1;
       overflow-y: auto;
-      padding: 16px 20px;
       outline: none;
       font-size: 14px;
       line-height: 1.5;
@@ -2376,11 +2617,22 @@
       word-wrap: break-word;
     }
 
-    #notes-editor:empty::before {
-      content: 'Start writing…';
+    /* Tiptap inner div */
+    #notes-editor .tiptap {
+      padding: 16px 20px;
+      min-height: 100%;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    /* Placeholder */
+    #notes-editor .tiptap p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
       color: var(--p-placeholder);
       font-style: italic;
       pointer-events: none;
+      float: left;
+      height: 0;
     }
 
     #notes-source {
@@ -2408,6 +2660,28 @@
       opacity: 0.3;
       cursor: default;
       pointer-events: none;
+    }
+
+    /* Table styling */
+    #notes-editor .tiptap-table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8px 0;
+    }
+    #notes-editor .tiptap-table td,
+    #notes-editor .tiptap-table th {
+      border: 1px solid var(--glass-border);
+      padding: 6px 10px;
+      font-size: 13px;
+      vertical-align: top;
+      min-width: 60px;
+    }
+    #notes-editor .tiptap-table th {
+      background: var(--glass);
+      font-weight: 600;
+    }
+    #notes-editor .tiptap-table .selectedCell {
+      background: rgba(167, 139, 250, 0.15);
     }
 
     #notes-editor h1 {
@@ -2475,54 +2749,116 @@
       margin: 10px 0;
     }
 
-    #notes-editor .check-item {
+    /* ── Tiptap task list (from Tiptap docs) ── */
+    #notes-editor ul[data-type="taskList"] {
+      list-style: none;
+      margin: 3px 0 4px;
+      padding: 0;
+    }
+
+    #notes-editor ul[data-type="taskList"] li {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-bottom: 3px;
     }
 
-    #notes-editor .check-item[data-checked="true"] .check-text {
-      text-decoration: line-through;
-      opacity: 0.4;
+    #notes-editor ul[data-type="taskList"] li > label {
+      flex: 0 0 auto;
+      cursor: pointer;
+      user-select: none;
     }
 
-    #notes-editor .check-text {
-      flex: 1;
-      outline: none;
-      min-width: 0;
+    #notes-editor ul[data-type="taskList"] li > div {
+      flex: 1 1 auto;
     }
 
-    #notes-editor .note-chk {
-      background: none;
-      border: 1.5px solid var(--p-chk-border);
-      border-radius: 5px;
+    #notes-editor ul[data-type="taskList"] input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
       width: 16px;
       height: 16px;
-      min-width: 16px;
+      border: 1.5px solid var(--p-chk-border);
+      border-radius: 5px;
       cursor: pointer;
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 700;
-      color: transparent;
       transition: all 0.15s;
-      padding: 0;
-      user-select: none;
-      -webkit-user-select: none;
+      position: relative;
+      vertical-align: middle;
     }
 
-    #notes-editor .note-chk:hover {
+    #notes-editor ul[data-type="taskList"] input[type="checkbox"]:hover {
       border-color: var(--accent);
       background: rgba(167, 139, 250, 0.12);
     }
 
-    #notes-editor .note-chk.checked {
+    #notes-editor ul[data-type="taskList"] input[type="checkbox"]:checked {
       background: var(--accent);
       border-color: var(--accent);
+    }
+
+    #notes-editor ul[data-type="taskList"] input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: -1px;
+      left: 2px;
+      font-size: 10px;
+      font-weight: 700;
       color: #1a0f2e;
+    }
+
+    #notes-editor ul[data-type="taskList"] li[data-checked="true"] > div,
+    #notes-editor ul[data-type="taskList"] li[data-type="taskItem"][data-checked="true"] > div {
+      text-decoration: line-through;
+      opacity: 0.4;
+    }
+
+    /* ── Blockquote ── */
+    #notes-editor blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+      margin: 6px 0;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* ── Code block ── */
+    #notes-editor pre {
+      background: var(--p-code-bg);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 6px 0;
+      overflow-x: auto;
+    }
+
+    #notes-editor pre code {
+      background: none;
+      border-radius: 0;
+      padding: 0;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    /* ── Highlight ── */
+    #notes-editor mark {
+      background: rgba(255, 220, 50, 0.3);
+      border-radius: 2px;
+      padding: 0 2px;
+      color: inherit;
+    }
+
+    /* ── Subscript / Superscript ── */
+    #notes-editor sub { font-size: 0.75em; }
+    #notes-editor sup { font-size: 0.75em; }
+
+    /* ── Text align ── */
+    #notes-editor [style*="text-align: center"] { text-align: center; }
+    #notes-editor [style*="text-align: right"]  { text-align: right; }
+    #notes-editor [style*="text-align: left"]   { text-align: left; }
+
+    /* ── Ordered list ── */
+    #notes-editor ol {
+      padding-left: 20px;
+      margin: 3px 0 4px;
     }
 
     /* ─── SAVED LINKS IN PANEL ─── */
@@ -2727,6 +3063,7 @@
       flex-shrink: 0;
     }
 
+    .saved-item-edit,
     .saved-item-copy,
     .saved-item-delete {
       background: none;
@@ -2740,9 +3077,28 @@
       flex-shrink: 0;
     }
 
+    .saved-item-read {
+      padding: 4px;
+      background: none;
+      border: none;
+      border-radius: 5px;
+      display: inline-flex;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .saved-item.is-read .saved-item-read { color: #fbbf24 !important; }
+
+    .saved-item:hover .saved-item-edit,
     .saved-item:hover .saved-item-copy,
+    .saved-item:hover .saved-item-read,
     .saved-item:hover .saved-item-delete {
       color: var(--text-muted);
+    }
+
+    .saved-item-edit:hover {
+      color: #c4b5fd !important;
+      background: rgba(167, 139, 250, 0.15);
     }
 
     .saved-item-copy:hover {
@@ -2753,6 +3109,16 @@
     .saved-item-delete:hover {
       color: #fca5a5 !important;
       background: rgba(239, 68, 68, 0.15);
+    }
+
+    .saved-item.is-read { opacity: 0.55; }
+    .saved-item.is-read .saved-item-title {
+      text-decoration: line-through;
+      text-decoration-color: rgba(167,139,250,0.5);
+    }
+    .saved-item-read:hover {
+      color: #fbbf24 !important;
+      background: rgba(251, 191, 36, 0.15);
     }
 
     /* Tag color picker in modal */
@@ -2875,8 +3241,10 @@
           <span id="weather-loc"></span>
         </div>
       </div>
-      <div id="topbar-actions">
-        <button class="icon-btn" id="notes-btn" data-tip="Notes & Saved Links">
+      <div id="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:4px;">
+        <div id="public-ip" style="font-size:10px;letter-spacing:0.12em;color:rgba(255,255,255,0.35);text-transform:uppercase;"></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+        <button class="icon-btn" id="notes-btn" data-tip="Notes, Bookmarks & Kindling">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -2902,6 +3270,7 @@
               d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
+        </div>
       </div>
     </div>
 
@@ -2933,10 +3302,7 @@
     <!-- QUICKLINKS -->
     <div id="ql-section">
       <div id="ql-header">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="bm-sync-badge"
-            style="display:none;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);opacity:0.8;background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:20px;border:1px solid rgba(167,139,250,0.2);">Synced</span>
-        </div>
+        <div style="display:flex;align-items:center;gap:10px"></div>
         <div style="display:flex;gap:6px;align-items:center">
           <button id="ql-icon-toggle" class="icon-btn" title="Toggle icon view"
             style="width:32px;height:32px;padding:0;">
@@ -2947,33 +3313,6 @@
               <rect x="3" y="14" width="7" height="7" />
               <rect x="14" y="14" width="7" height="7" />
             </svg>
-          </button>
-          <button id="export-btn" class="icon-btn" style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;"
-            data-tip="Export links">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
-          </button>
-          <button id="bm-sync-btn" class="icon-btn"
-            style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;" data-tip="Sync from bookmarks folder">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-            Bookmarks
-          </button>
-          <button id="ql-add-section-btn" class="icon-btn"
-            style="width:auto;padding:0 12px;height:32px;font-size:12px;gap:5px;" title="Add section">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Section
           </button>
           <button id="add-link-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -3082,9 +3421,10 @@
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Saved Links</div>
-      <p class="help-p">A personal reading list. Open the notepad icon → Saved Links tab. The panel can be Light, Dark,
-        or System themed independently of the background.</p>
+      <div class="help-section-title">Kindling</div>
+      <p class="help-p">Your reading list — articles, threads, and pages you'll come back to. Open the notepad icon →
+        Kindling tab. Mark items read once you've finished; filter by <strong>Unread</strong> / <strong>Read</strong> or
+        by tag. The panel can be Light, Dark, or System themed independently of the background.</p>
       <div class="help-row"><span class="help-row-label">Add from panel</span><span class="help-row-desc">+ Add Link
           button inside the tab</span></div>
       <div class="help-row"><span class="help-row-label">Save current tab</span><span class="help-row-desc">Click the
@@ -3126,8 +3466,8 @@
           · NASA APOD · Wikimedia POTD — refreshed each day, rotate each tab</span></div>
       <div class="help-row"><span class="help-row-label">Custom wallpaper</span><span class="help-row-desc">Upload one
           or more images; filename becomes the title; edit emoji/title on the card. Only titles and selection sync (not
-          image data), so the gist stays small.</span></div>
-      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Saved Links
+          image data), so sync stays small.</span></div>
+      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Kindling
           panel: Dark · Light · System (follows OS)</span></div>
       <div class="help-row"><span class="help-row-label">Daily Focus</span><span class="help-row-desc">Settings → Daily
           Focus — quotes rotate daily; fetch extras from ZenQuotes</span></div>
@@ -3138,28 +3478,29 @@
     <div class="help-section">
       <div class="help-section-title">Auto-fill forms</div>
       <p class="help-p">Add entries in Settings → Auto-fill forms. Then right-click on any page and choose
-        <strong>Auto-fill form with</strong> → an entry to fill inputs (name, email, phone, address, etc.). Entries sync
-        with your gist.
+        <strong>Auto-fill form with</strong> → an entry to fill inputs (name, email, phone, address, etc.).
       </p>
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Sync via GitHub Gist</div>
-      <p class="help-p">All data syncs across browsers (Chrome, Firefox, Safari, Edge) using a private GitHub Gist.
-        Settings → Sync.</p>
-      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Create a GitHub PAT
-          with <strong>gist</strong> scope → paste into Settings → Sync</span></div>
-      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates one main
-          gist (settings, links) and a separate gist per note — each note appears as its own gist in your GitHub Gists
-          list</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after any
-          change (links, settings, and each note as its own file)</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">On every new tab
-          open</span></div>
-      <div class="help-row"><span class="help-row-label">Manual</span><span class="help-row-desc">Sync Now button in
-          Settings</span></div>
-      <div class="help-row"><span class="help-row-label">No token</span><span class="help-row-desc">Extension works
-          normally without sync — nothing changes</span></div>
+      <div class="help-section-title">Sync via Asana (private project)</div>
+      <p class="help-p">Notes sync to Asana as tasks inside a private "Lumina Notes" project (private to you, invisible
+        to your organization). Settings → Sync.</p>
+      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Asana → Profile → My
+          Settings → Apps → Manage Developer Apps → create a Personal Access Token → paste it into Settings →
+          Sync → Connect</span></div>
+      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates a
+          "Lumina Notes" private project in your workspace and pushes any existing local notes as tasks</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after
+          any edit. Also flushes immediately when you switch tabs, switch apps, or close the window.</span></div>
+      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">When the tab
+          becomes visible again, edits you made to tasks in Asana are pulled back in.</span></div>
+      <div class="help-row"><span class="help-row-label">Deletes</span><span class="help-row-desc">Deleting a note
+          locally marks the corresponding Asana task complete (reversible from Asana).</span></div>
+      <div class="help-row"><span class="help-row-label">Exports</span><span class="help-row-desc">Download quick
+          links + saved links as markdown, or settings as JSON, from Settings → Sync.</span></div>
+      <div class="help-row"><span class="help-row-label">Not configured</span><span class="help-row-desc">Extension
+          works normally without sync — nothing changes</span></div>
     </div>
 
     <div class="help-section">
@@ -3216,16 +3557,23 @@
   <div id="settings-panel">
     <div id="settings-header">
       <span id="settings-header-title">Settings</span>
-      <button id="settings-close-btn">✕</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="settings-theme-toggle" title="Toggle light/dark" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center;transition:color 0.2s;">
+          <svg id="settings-theme-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>
+          </svg>
+        </button>
+        <button id="settings-close-btn">✕</button>
+      </div>
     </div>
     <div id="settings-body">
       <div class="settings-col">
 
         <div class="settings-section">
           <div class="settings-section-title">Background</div>
-          <div class="toggle-row" style="margin-bottom:12px;">
-            <span class="toggle-label" id="bg-mode-label">Colors</span>
-            <button class="toggle" id="toggle-bg-mode"></button>
+          <div class="bg-mode-tabs" style="display:flex;gap:0;margin-bottom:12px;background:rgba(255,255,255,0.06);border-radius:10px;padding:3px;">
+            <button class="bg-mode-tab" data-mode="colors" style="flex:1;padding:7px 12px;border-radius:8px;border:none;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.2s;background:transparent;color:var(--text-muted);">Animated Colors</button>
+            <button class="bg-mode-tab" data-mode="wallpaper" style="flex:1;padding:7px 12px;border-radius:8px;border:none;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.2s;background:transparent;color:var(--text-muted);">Wallpaper</button>
           </div>
           <div class="bg-mode-pane" id="bg-pane-colors">
             <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.4;">Select one or more
@@ -3288,7 +3636,6 @@
               <button class="wp-add-btn" id="focus-line-add-btn">Add</button>
             </div>
             <div class="focus-api-row">
-              <button class="focus-api-btn" id="focus-fetch-btn">✨ Fetch from API</button>
               <button class="focus-reset-btn" id="focus-reset-btn">Reset to defaults</button>
             </div>
           </div>
@@ -3329,7 +3676,7 @@
           <div class="settings-section-title">Auto-fill forms</div>
           <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;">Right-click on any page
             → <strong>Auto-fill form with</strong> → choose an entry. Add address book entries below; they sync with
-            your gist.</p>
+            your Asana project.</p>
           <div id="address-book-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
           <button id="address-book-add-btn" type="button"
             style="width:100%;padding:8px 12px;border-radius:8px;border:1px dashed var(--glass-border);background:rgba(167,139,250,0.08);color:var(--accent);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">+
@@ -3466,11 +3813,26 @@
         </div>
 
         <div class="settings-section" style="margin-bottom:0">
-          <div class="settings-section-title">Sync via GitHub Gist</div>
+          <div class="settings-section-title">Sync via Asana (private project)</div>
           <div class="field" style="margin-bottom:10px">
-            <label>Personal Access Token <span style="opacity:0.45;font-size:10px">(repo:gist scope)</span></label>
-            <input id="sync-pat" type="password" placeholder="ghp_xxxxxxxxxxxx" maxlength="200"
+            <label>Personal Access Token</label>
+            <input id="asana-pat" type="password" placeholder="Paste your Asana PAT" maxlength="200"
               style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Workspace</label>
+            <select id="asana-workspace-select"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;"></select>
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Project</label>
+            <div style="font-size:13px;color:var(--text-muted);padding:8px 0;"><span id="asana-project-name">(not connected)</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button id="asana-connect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Connect</button>
+            <button id="asana-disconnect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Disconnect</button>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <button id="sync-now-btn"
@@ -3480,11 +3842,20 @@
               style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
           </div>
           <div style="margin-top:8px;">
-            <a id="sync-gist-link" href="#"
-              style="display:none;font-size:12px;color:var(--accent);text-decoration:none;">Open gist on GitHub →</a>
-            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Main
-              gist has settings/links; each note is its own gist (see your Gists list). Sync once to create.</span>
+            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Notes sync as tasks in a private "Lumina Notes" project (private to you). Deleted notes are marked complete in Asana.</span>
           </div>
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button id="asana-export-links-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export links (.md)</button>
+            <button id="asana-export-settings-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export settings (.json)</button>
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px;">
+          <div class="settings-section-title">Settings History</div>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">Last 30 revisions are saved automatically. Restore any previous version below.</p>
+          <div id="settings-archive-list"></div>
         </div>
 
       </div><!-- /settings-col 3 -->
@@ -3500,8 +3871,14 @@
     <div id="notes-header">
       <div class="notes-tabs">
         <button class="notes-tab active" data-tab="notes">Notes</button>
-        <button class="notes-tab" data-tab="saved">Saved Links</button>
+        <button class="notes-tab" data-tab="bookmarks">Bookmarks</button>
+        <button class="notes-tab" data-tab="saved">Kindling</button>
       </div>
+      <button id="notes-theme-toggle" title="Toggle light/dark" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center;transition:color 0.2s;">
+        <svg id="notes-theme-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/>
+        </svg>
+      </button>
       <button id="notes-close-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round">
@@ -3515,23 +3892,48 @@
     <div id="notes-tab-content" class="notes-tab-pane active">
       <div id="note-tabs-row"></div>
       <div id="notes-toolbar">
+        <!-- Row 1: core formatting -->
         <button class="md-btn" data-cmd="bold" title="Bold ⌘B"><strong>B</strong></button>
         <button class="md-btn" data-cmd="italic" title="Italic ⌘I"><em>I</em></button>
+        <button class="md-btn" data-cmd="underline" title="Underline ⌘U"><u>U</u></button>
         <button class="md-btn" data-cmd="strike" title="Strikethrough ⌘⇧X"><s>S</s></button>
+        <button class="md-btn" data-cmd="highlight" title="Highlight" style="font-size:13px;">▌</button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
         <button class="md-btn" data-cmd="h1" title="Heading 1 ⌘1">H1</button>
         <button class="md-btn" data-cmd="h2" title="Heading 2 ⌘2">H2</button>
-        <button class="md-btn" data-cmd="code" title="Code ⌘E">&grave;</button>
-        <button class="md-btn" data-cmd="list" title="List ⌘L">—</button>
-        <button class="md-btn" data-cmd="check" title="Checkbox ⌘⇧C">☐</button>
-        <button class="md-btn" id="clear-checked-btn" title="Clear completed checklist items">✓×</button>
-        <button class="md-btn" id="undo-note-btn" title="Undo" disabled style="opacity:0.35;">
+        <button class="md-btn" data-cmd="h3" title="Heading 3 ⌘3">H3</button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
+        <button class="md-btn" data-cmd="code" title="Inline code ⌘E">&grave;</button>
+        <button class="md-btn" data-cmd="codeblock" title="Code block" style="font-size:10px;">{`}</button>
+        <button class="md-btn" data-cmd="blockquote" title="Blockquote" style="font-size:13px;">"</button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
+        <button class="md-btn" data-cmd="list" title="Bullet list ⌘L">—</button>
+        <button class="md-btn" data-cmd="olist" title="Ordered list" style="font-size:10px;">1.</button>
+        <button class="md-btn" data-cmd="check" title="Task list ⌘⇧C">☐</button>
+        <button class="md-btn" id="clear-checked-btn" title="Clear completed tasks" style="font-size:10px;">✓×</button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
+        <button class="md-btn" data-cmd="link" title="Link ⌘K" style="font-size:12px;">🔗</button>
+        <button class="md-btn" data-cmd="sub" title="Subscript" style="font-size:10px;">x₂</button>
+        <button class="md-btn" data-cmd="sup" title="Superscript" style="font-size:10px;">x²</button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
+        <button class="md-btn" data-cmd="align-left" title="Align left" style="font-size:12px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="21" y1="6" x2="3" y2="6"/><line x1="15" y1="12" x2="3" y2="12"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+        </button>
+        <button class="md-btn" data-cmd="align-center" title="Align center">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="21" y1="6" x2="3" y2="6"/><line x1="18" y1="12" x2="6" y2="12"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+        </button>
+        <button class="md-btn" data-cmd="align-right" title="Align right">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/></svg>
+        </button>
+        <span style="width:1px;height:14px;background:var(--glass-border);flex-shrink:0;margin:0 2px;"></span>
+        <button class="md-btn" id="undo-note-btn" title="Undo ⌘Z" disabled style="opacity:0.35;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 7v6h6" />
             <path d="M3 13C5.33 7.33 10 4 16 4a9 9 0 0 1 0 18H3" />
           </svg>
         </button>
-        <button class="md-btn" id="source-btn" title="Toggle source (markdown)">
+        <button class="md-btn" id="source-btn" title="Toggle markdown source">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 18 22 12 16 6" />
@@ -3558,8 +3960,41 @@
           Apple Notes
         </button>
       </div>
-      <div id="notes-editor" contenteditable="true" spellcheck="true" data-gramm="false"></div>
+      <div id="notes-editor"></div>
       <textarea id="notes-source" spellcheck="false" placeholder="Markdown source…"></textarea>
+      <div id="sync-status-bar">
+        <span id="sync-status-dot"></span>
+        <span id="sync-status-text">Checking Asana…</span>
+      </div>
+    </div>
+
+    <!-- BOOKMARKS TAB -->
+    <div id="bookmarks-tab-content" class="notes-tab-pane">
+      <div id="bm-tree-toolbar" style="display:flex;gap:6px;padding:10px 20px 8px;align-items:center;flex-shrink:0;">
+        <input id="bm-tree-search" type="text" placeholder="Search bookmarks…"
+          style="flex:1;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;outline:none;font-family:'Inter',sans-serif;" />
+        <button id="bm-tree-refresh" class="icon-btn" title="Refresh"
+          style="width:28px;height:28px;padding:0;flex-shrink:0;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+        <button id="export-btn" class="icon-btn" title="Export links"
+          style="width:28px;height:28px;padding:0;flex-shrink:0;" data-tip="Export links">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+      </div>
+      <div id="bm-scroll" style="flex:1;overflow-y:auto;padding:4px 12px 12px;">
+        <div id="bm-quicklinks" class="bm-ql-wrap"></div>
+        <div id="bm-tree"></div>
+      </div>
     </div>
 
     <!-- SAVED TAB -->
@@ -3587,8 +4022,8 @@
       </div>
       <div id="saved-filters"></div>
       <div id="saved-list">
-        <div id="saved-empty">No saved links yet.<br><small style="opacity:0.6">Use the bookmark button in any tab to
-            save from anywhere.</small></div>
+        <div id="saved-empty">Kindling is empty.<br><small style="opacity:0.6">Add a link from the button above, or
+            click the Lumina icon in Chrome's toolbar on any page to stash it here.</small></div>
       </div>
     </div>
   </div>
@@ -3596,7 +4031,7 @@
   <!-- SAVE LINK MODAL -->
   <div id="saved-modal" style="display:none" class="modal-backdrop">
     <div class="modal">
-      <h2>Save Link</h2>
+      <h2 id="saved-modal-heading">Save Link</h2>
       <div class="field">
         <label>URL</label>
         <input type="url" id="saved-modal-url" placeholder="https://example.com" />
@@ -3721,11 +4156,6 @@
         <label>Title <span style="opacity:0.5;font-size:10px">(auto-detected)</span></label>
         <input type="text" id="modal-label" placeholder="My Link" />
       </div>
-      <div class="field" id="modal-section-row">
-        <label>Section</label>
-        <select id="modal-section"
-          style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;cursor:pointer;"></select>
-      </div>
       <div class="field">
         <label>Favicon</label>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -3759,6 +4189,78 @@
     </div>
   </div>
 
+  <!-- WELCOME / SETUP OVERLAY -->
+  <div id="setup-overlay">
+    <div id="setup-card">
+      <!-- Step 1: Welcome -->
+      <div class="setup-step active" data-step="welcome">
+        <div class="setup-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/>
+          </svg>
+        </div>
+        <h2 class="setup-title">Welcome to Lumina</h2>
+        <p class="setup-desc">Your new tab, reimagined. Connect Lumina to Asana to sync your notes with tasks in a private project.</p>
+        <div class="setup-actions">
+          <button class="setup-btn primary" id="setup-connect-btn">Connect to Asana</button>
+          <button class="setup-btn ghost" id="setup-skip-btn">Skip for now</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Configure -->
+      <div class="setup-step" data-step="configure">
+        <div class="setup-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+          </svg>
+        </div>
+        <h2 class="setup-title">Connect to Asana</h2>
+        <p class="setup-desc">Create a Personal Access Token in Asana (Profile → My Settings → Apps → Manage Developer Apps), then paste it below. Lumina will create a private "Lumina Notes" project and sync each note as a task.</p>
+        <div class="setup-fields">
+          <div class="setup-field">
+            <label>Personal Access Token</label>
+            <input id="setup-asana-pat" type="password" placeholder="Paste your Asana PAT" />
+          </div>
+        </div>
+        <div id="setup-test-status"></div>
+        <div class="setup-actions">
+          <button class="setup-btn primary" id="setup-test-btn">Connect</button>
+          <button class="setup-btn ghost" id="setup-back-btn">Back</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Connected / Import -->
+      <div class="setup-step" data-step="import">
+        <div class="setup-icon connected">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+          </svg>
+        </div>
+        <h2 class="setup-title">Connected</h2>
+        <p class="setup-desc">Asana is reachable. Push any existing local notes up to your private project as new tasks?</p>
+        <div class="setup-actions">
+          <button class="setup-btn primary" id="setup-import-btn">Push Notes to Asana</button>
+          <button class="setup-btn ghost" id="setup-fresh-btn">Start Fresh</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Done -->
+      <div class="setup-step" data-step="done">
+        <div class="setup-icon done">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/>
+          </svg>
+        </div>
+        <h2 class="setup-title">You're all set</h2>
+        <p class="setup-desc" id="setup-done-desc">Lumina is ready. Enjoy your new tab.</p>
+        <div class="setup-actions">
+          <button class="setup-btn primary" id="setup-done-btn">Get Started</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="tiptap-bundle.js"></script>
   <script src="newtab.js"></script>
 </body>
 
