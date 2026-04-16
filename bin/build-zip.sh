@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+OUT_DIR="${1:-.}"
 VERSION=$(node -p "require('./manifest.json').version")
 STAGE="build/lumina-new-tab"
 
 rm -rf build
-mkdir -p "$STAGE"
+mkdir -p "$STAGE" "$OUT_DIR"
 
 cp -r \
   manifest.json \
@@ -21,6 +22,8 @@ cp -r \
   icons \
   "$STAGE/"
 
-( cd build && zip -r "../lumina-new-tab-${VERSION}.zip" "lumina-new-tab" >/dev/null )
+ZIP_PATH="$OUT_DIR/lumina-new-tab-${VERSION}.zip"
+rm -f "$ZIP_PATH"
+( cd build && zip -r "$OLDPWD/$ZIP_PATH" "lumina-new-tab" >/dev/null )
 
-echo "Built lumina-new-tab-${VERSION}.zip"
+echo "Built $ZIP_PATH"
