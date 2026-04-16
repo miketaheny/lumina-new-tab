@@ -3829,6 +3829,15 @@
 
         <div class="settings-section" style="margin-bottom:0">
           <div class="settings-section-title">Sync via Asana (private project)</div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            <div style="font-weight:600;color:var(--text);margin-bottom:4px;">How to create a Personal Access Token</div>
+            <ol style="margin:0;padding-left:18px;">
+              <li>Open <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;">app.asana.com/0/my-apps</a> (or Profile → My Settings → Apps → Manage Developer Apps).</li>
+              <li>Click <strong>+ Create new token</strong>, name it (e.g. "Lumina"), and accept the terms.</li>
+              <li>Copy the token — Asana only shows it once.</li>
+              <li>Paste it below and click <strong>Connect</strong>. Lumina creates a private "Lumina Notes" project in your workspace.</li>
+            </ol>
+          </div>
           <div class="field" style="margin-bottom:10px">
             <label>Personal Access Token</label>
             <input id="asana-pat" type="password" placeholder="Paste your Asana PAT" maxlength="200"
