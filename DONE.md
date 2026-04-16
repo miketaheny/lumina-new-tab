@@ -36,6 +36,18 @@ Confirmed Asana's html_notes allowlist has no checkbox markup (kept existing tas
 
 ## Chores
 
+- [x] CHORE: update readme and user guide as needed based on changes
+
+```RESULT:
+Refreshed README permissions table (bookmarks purpose reflects new side-panel use; added contextMenus + scripting rows) and in-app user guide: removed stale Quick Links Sections/Bookmark-sync/Export rows, added a Bookmarks help section describing the side-panel tree + folder controls + mirrored Quick Links + export, and replaced the ZenQuotes reference in Daily Focus with the manual curation flow — commit: 718543f 2026.04.15 20:05:49
+```
+
+- [x] CHORE: add insturctions on creating Asana PAT in settings
+
+```RESULT:
+Added a how-to block directly in Settings → Sync (above the PAT field) with a 4-step numbered list, direct link to app.asana.com/0/my-apps, and the Profile → My Settings → Apps → Manage Developer Apps fallback path. Uses the glass-panel styling already present in the settings panel so it reads as part of the section rather than a banner — commit: f4f8604 2026.04.15 20:06:32
+```
+
 - [x] CHORE: move Export button from main-panel quick-links header into the side-panel Bookmarks tab
 
 ```RESULT:
