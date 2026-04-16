@@ -23,3 +23,6 @@ build/
 node_modules/
 package-lock.json
 yarn.lock
+
+# Local todo scratchpad (durable audit trail lives in DONE.md)
+TODO.md
