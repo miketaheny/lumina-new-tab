@@ -28,6 +28,12 @@ Completed prior to todos workflow — commit: unknown unknown
 
 ## Fixes
 
+- [x] FIX: the item that was supposed to preserve checkboxes during asana sync does not work, review and update
+
+```RESULT:
+Unchecked task items (- [ ] text) were losing their markers on Asana round-trip because markdownToAsanaHtml emitted plain <li>text</li> indistinguishable from bullets. Now unchecked items emit <li>[ ] text</li> as a text prefix, and asanaHtmlToMarkdown detects both the [ ] prefix and <s> strikethrough when reconstructing task lists — commit: 35a8d5f 2026.04.16 03:44:31
+```
+
 - [x] FIX: can asana support checkboxes, if not can we make notes work where clicking the bullet adds strikethrough? and make sure the clear completed button works
 
 ```RESULT:
