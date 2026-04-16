@@ -94,9 +94,11 @@ Quick Links, Saved Links, and your settings JSON can be downloaded from **Settin
 
 | Permission | Purpose |
 |---|---|
-| `storage` | Saves Saved Links in `chrome.storage.local`, shared between new tab and browser popup |
-| `bookmarks` | Reads and writes Chrome bookmark folders for bidirectional Quick Links sync |
+| `storage` | Saves Saved Links, Quick Links, and settings in `chrome.storage.local`, shared between new tab and browser popup |
+| `bookmarks` | Powers the side-panel Bookmarks tab — reads the tree, and creates / renames / deletes folders and bookmarks from the tab's folder controls |
 | `activeTab` | Lets the browser popup read the current tab's URL and title |
+| `contextMenus` | Adds the "Auto-fill form with…" right-click menu on any page |
+| `scripting` | Injects the auto-fill script into the active tab when you pick an entry from the context menu |
 
 ### External requests
 
