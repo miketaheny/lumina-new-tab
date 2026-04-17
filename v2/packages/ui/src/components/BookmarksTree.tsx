@@ -73,6 +73,7 @@ export function BookmarksTree() {
   const [modal, setModal] = useState<ModalState>(null);
   const [showImport, setShowImport] = useState(false);
   const [moveNode, setMoveNode] = useState<BookmarkNode | null>(null);
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     storage.getBookmarks().then(setData);
@@ -127,6 +128,91 @@ export function BookmarksTree() {
     setMoveNode(null);
   }
 
+  function exportAsMarkdown() {
+    const lines: string[] = [];
+    if (quickLinks?.links.length) {
+      lines.push('## Quick Links', '');
+      const sections = quickLinks.sections ?? [];
+      const grouped = new Map<string, typeof quickLinks.links>();
+      for (const l of quickLinks.links) {
+        const arr = grouped.get(l.section) ?? [];
+        arr.push(l);
+        grouped.set(l.section, arr);
+      }
+      for (const [secId, links] of grouped) {
+        const sec = sections.find(s => s.id === secId);
+        if (sec) lines.push(`### ${sec.label}`, '');
+        for (const l of links) lines.push(`- [${l.label}](${l.url})`);
+        lines.push('');
+      }
+    }
+    if (data.roots.length) {
+      lines.push('## Bookmarks', '');
+      const renderTree = (nodes: BookmarkNode[], indent: string) => {
+        for (const n of nodes) {
+          if (n.type === 'bookmark') {
+            lines.push(`${indent}- [${n.title}](${n.url})`);
+          } else {
+            lines.push(`${indent}- **${n.title}**/`);
+            if (n.children) renderTree(n.children, indent + '  ');
+          }
+        }
+      };
+      renderTree(data.roots, '');
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    setShowExport(false);
+  }
+
+  function exportAsPlainText() {
+    const lines: string[] = [];
+    if (quickLinks?.links.length) {
+      lines.push('Quick Links', '---');
+      for (const l of quickLinks.links) lines.push(`${l.label}: ${l.url}`);
+      lines.push('');
+    }
+    if (data.roots.length) {
+      lines.push('Bookmarks', '---');
+      const renderTree = (nodes: BookmarkNode[], indent: string) => {
+        for (const n of nodes) {
+          if (n.type === 'bookmark') {
+            lines.push(`${indent}${n.title}: ${n.url}`);
+          } else {
+            lines.push(`${indent}[${n.title}]`);
+            if (n.children) renderTree(n.children, indent + '  ');
+          }
+        }
+      };
+      renderTree(data.roots, '');
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    setShowExport(false);
+  }
+
+  function exportAsAppleNotes() {
+    const lines: string[] = [];
+    if (quickLinks?.links.length) {
+      lines.push('Quick Links', '');
+      for (const l of quickLinks.links) lines.push(`${l.label}\n${l.url}\n`);
+    }
+    if (data.roots.length) {
+      lines.push('Bookmarks', '');
+      const renderTree = (nodes: BookmarkNode[], indent: string) => {
+        for (const n of nodes) {
+          if (n.type === 'bookmark') {
+            lines.push(`${indent}${n.title}\n${indent}${n.url}\n`);
+          } else {
+            lines.push(`${indent}${n.title}`);
+            if (n.children) renderTree(n.children, indent + '  ');
+          }
+        }
+      };
+      renderTree(data.roots, '');
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    setShowExport(false);
+  }
+
   const query = search.trim().toLowerCase();
   const visible = useMemo(() => {
     if (!query) return data.roots;
@@ -151,6 +237,14 @@ export function BookmarksTree() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <button
+          style={addBtnStyle}
+          title="Export bookmarks"
+          onClick={() => setShowExport(true)}
+        >
+          <ExportSvg />
+          <span style={{ fontSize: 11 }}>Export</span>
+        </button>
         <button
           style={addBtnStyle}
           title="Import from Chrome"
@@ -246,6 +340,25 @@ export function BookmarksTree() {
           onSave={persist}
           onClose={() => setModal(null)}
         />
+      )}
+      {showExport && (
+        <div style={moveOverlayStyle} onClick={e => { if (e.target === e.currentTarget) setShowExport(false); }}>
+          <div style={moveModalStyle}>
+            <div style={moveHeaderStyle}>
+              <span style={moveTitleStyle}>Export Bookmarks</span>
+              <button style={moveCloseBtnStyle} onClick={() => setShowExport(false)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div style={moveBodyStyle}>
+              <button style={exportOptionBtnStyle} onClick={exportAsMarkdown}>Markdown</button>
+              <button style={exportOptionBtnStyle} onClick={exportAsAppleNotes}>Apple Notes</button>
+              <button style={exportOptionBtnStyle} onClick={exportAsPlainText}>Plain Text</button>
+            </div>
+          </div>
+        </div>
       )}
       {moveNode && (
         <div style={moveOverlayStyle} onClick={e => { if (e.target === e.currentTarget) setMoveNode(null); }}>
@@ -495,10 +608,31 @@ const moveFolderBtnStyle: React.CSSProperties = {
   textAlign: 'left',
 };
 
+const exportOptionBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '9px 14px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,0.08)',
+  background: 'rgba(255,255,255,0.04)',
+  color: 'rgba(255,255,255,0.7)',
+  fontSize: 12,
+  fontFamily: 'Inter, sans-serif',
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+
 function SearchSvg() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  );
+}
+function ExportSvg() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
   );
 }
