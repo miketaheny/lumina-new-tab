@@ -14,7 +14,7 @@ export default defineConfig({
       'https://www.bing.com/*',
     ],
     oauth2: {
-      client_id: 'PLACEHOLDER.apps.googleusercontent.com',
+      client_id: '603010888709-aedkplba5694rbacksisevfmges8mpak.apps.googleusercontent.com',
       scopes: [
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/userinfo.profile',

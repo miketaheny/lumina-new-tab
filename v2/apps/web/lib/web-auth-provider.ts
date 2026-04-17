@@ -1,6 +1,6 @@
 import type { AuthProvider, UserProfile } from '@lumina/drive';
 
-const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'PLACEHOLDER.apps.googleusercontent.com';
+const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '603010888709-h4m431c39ar5mbnl10oh5ariq50kp4sq.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 
 let accessToken: string | null = null;
