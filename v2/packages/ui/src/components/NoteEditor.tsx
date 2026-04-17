@@ -175,6 +175,17 @@ export function NoteEditor({ content, onChange, onSave }: NoteEditorProps) {
         >
           <CodeBlockSvg />
         </ToolBtn>
+        <Divider />
+        <ToolBtn
+          title="Copy as Markdown"
+          onClick={() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const md = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getHTML();
+            navigator.clipboard.writeText(md);
+          }}
+        >
+          <CopyMdSvg />
+        </ToolBtn>
       </div>
       <EditorContent editor={editor} style={editorContentStyle} />
       <style>{editorCss}</style>
@@ -266,6 +277,14 @@ function CodeBlockSvg() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="18" rx="3"/>
       <polyline points="8 10 4 14 8 18"/><polyline points="16 10 20 14 16 18"/>
+    </svg>
+  );
+}
+
+function CopyMdSvg() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
     </svg>
   );
 }
