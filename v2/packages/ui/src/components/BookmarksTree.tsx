@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { storage } from '@lumina/core';
 import { markDirty, schedulePush } from '@lumina/drive';
-import type { BookmarkNode, BookmarksData } from '@lumina/core';
+import type { BookmarkNode, BookmarksData, QuickLinksData, QuickLink } from '@lumina/core';
 import { BookmarkNodeComponent } from './BookmarkNode';
 import { BookmarkModal } from './BookmarkModal';
 import { BookmarkSyncModal } from './BookmarkSyncModal';
+import { Favicon } from './Favicon';
 
 const COLLAPSED_KEY = 'lumina_bm_v2_collapsed';
 
@@ -65,7 +66,9 @@ type ModalState =
 
 export function BookmarksTree() {
   const [data, setData] = useState<BookmarksData>({ roots: [], updatedAt: '' });
+  const [quickLinks, setQuickLinks] = useState<QuickLinksData | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+  const [qlCollapsed, setQlCollapsed] = useState(false);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<ModalState>(null);
   const [showImport, setShowImport] = useState(false);
@@ -73,6 +76,7 @@ export function BookmarksTree() {
 
   useEffect(() => {
     storage.getBookmarks().then(setData);
+    storage.getQuickLinks().then(setQuickLinks);
   }, []);
 
   const persist = useCallback(async (next: BookmarksData) => {
@@ -129,6 +133,12 @@ export function BookmarksTree() {
     return data.roots.map(r => filterTree(r, query)).filter(Boolean) as BookmarkNode[];
   }, [data.roots, query]);
 
+  const filteredQuickLinks = useMemo(() => {
+    if (!quickLinks) return [];
+    if (!query) return quickLinks.links;
+    return quickLinks.links.filter(l => `${l.label} ${l.url}`.toLowerCase().includes(query));
+  }, [quickLinks, query]);
+
   return (
     <div style={containerStyle}>
       <div style={searchRowStyle}>
@@ -160,7 +170,41 @@ export function BookmarksTree() {
       </div>
 
       <div style={treeStyle}>
-        {visible.length === 0 ? (
+        {filteredQuickLinks.length > 0 && (
+          <div style={qlSectionStyle}>
+            <div
+              style={qlHeaderStyle}
+              onClick={() => setQlCollapsed(v => !v)}
+            >
+              <span style={{ ...qlChevronStyle, transform: qlCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
+              <span style={qlTitleStyle}>Quick Links</span>
+              <span style={qlCountStyle}>{filteredQuickLinks.length}</span>
+            </div>
+            {!qlCollapsed && (
+              <div style={qlListStyle}>
+                {filteredQuickLinks.map(link => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={qlItemStyle}
+                    title={link.url}
+                  >
+                    <Favicon url={link.url} label={link.label} size={12} />
+                    <span style={qlLabelStyle}>{link.label}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {visible.length === 0 && filteredQuickLinks.length === 0 ? (
           <div style={emptyStyle}>
             {query ? 'No bookmarks match.' : 'No bookmarks yet.'}
           </div>
@@ -304,6 +348,72 @@ const emptyStyle: React.CSSProperties = {
   color: 'rgba(255,255,255,0.25)',
   fontSize: 12,
   fontFamily: 'Inter, sans-serif',
+};
+
+const qlSectionStyle: React.CSSProperties = {
+  marginBottom: 6,
+  borderBottom: '1px solid rgba(255,255,255,0.06)',
+  paddingBottom: 6,
+};
+
+const qlHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '4px 10px',
+  cursor: 'pointer',
+  userSelect: 'none',
+};
+
+const qlChevronStyle: React.CSSProperties = {
+  width: 12,
+  height: 12,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'rgba(255,255,255,0.4)',
+  transition: 'transform 0.15s',
+  flexShrink: 0,
+};
+
+const qlTitleStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'rgba(255,255,255,0.5)',
+  fontFamily: 'Inter, sans-serif',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+
+const qlCountStyle: React.CSSProperties = {
+  fontSize: 10,
+  color: 'rgba(255,255,255,0.25)',
+  fontFamily: 'Inter, sans-serif',
+};
+
+const qlListStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: '2px 0',
+};
+
+const qlItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '3px 10px 3px 27px',
+  borderRadius: 5,
+  textDecoration: 'none',
+  color: 'rgba(255,255,255,0.6)',
+  fontSize: 12,
+  fontFamily: 'Inter, sans-serif',
+};
+
+const qlLabelStyle: React.CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 };
 
 const moveOverlayStyle: React.CSSProperties = {
