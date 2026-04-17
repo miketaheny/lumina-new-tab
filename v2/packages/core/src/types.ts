@@ -100,7 +100,7 @@ export interface LuminaSettings {
   greetingName: string;
   greetingCustom: boolean;
   greetingCustomText: string;
-  panelTheme: 'dark' | 'light';
+  panelTheme: 'dark' | 'light' | 'system';
   notesPanelOpen: boolean;
   qlIconsOnly: boolean;
   qlCollapsed: Record<string, boolean>;

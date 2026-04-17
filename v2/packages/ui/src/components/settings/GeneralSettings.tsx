@@ -74,7 +74,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       <SectionLabel>Panel Theme</SectionLabel>
       <div style={segmentedStyle}>
-        {(['dark', 'light'] as const).map(t => (
+        {(['dark', 'light', 'system'] as const).map(t => (
           <button
             key={t}
             style={{
@@ -85,7 +85,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             }}
             onClick={() => set('panelTheme', t)}
           >
-            {t === 'dark' ? '🌙 Dark' : '☀️ Light'}
+            {t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'System'}
           </button>
         ))}
       </div>

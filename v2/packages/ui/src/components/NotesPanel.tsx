@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { storage } from '@lumina/core';
 import { markDirty, schedulePush } from '@lumina/drive';
-import type { Note } from '@lumina/core';
+import type { Note, LuminaSettings } from '@lumina/core';
 import { NoteEditor } from './NoteEditor';
 import { NoteTabBar } from './NoteTabBar';
 
@@ -36,12 +36,27 @@ export function NotesPanel({
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
   const pendingContentRef = useRef<Map<string, string>>(new Map());
+  const [panelTheme, setPanelTheme] = useState<LuminaSettings['panelTheme']>('dark');
+
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const isDark = panelTheme === 'system' ? systemDark : panelTheme === 'dark';
+  const t = useMemo(() => isDark ? DARK_TOKENS : LIGHT_TOKENS, [isDark]);
 
   useEffect(() => {
     if (!open) return;
     Promise.all([storage.getNotes(), storage.getSettings()]).then(([ns, settings]) => {
       const loaded = ns.length > 0 ? ns : [{ id: 'note-default', title: 'Notes', content: '', sortOrder: 0, updatedAt: new Date().toISOString() }];
       setNotes(loaded);
+      setPanelTheme(settings.panelTheme ?? 'dark');
       const activeId = settings.activeNoteId ?? loaded[0].id;
       setActiveNoteId(activeId);
       const note = loaded.find(n => n.id === activeId) ?? loaded[0];
@@ -150,16 +165,23 @@ export function NotesPanel({
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   return (
-    <div style={{ ...panelStyle, transform: open ? 'translateX(0)' : 'translateX(100%)' }}>
+    <div style={{
+      ...panelStyle,
+      background: t.panelBg,
+      borderLeft: `1px solid ${t.border}`,
+      transform: open ? 'translateX(0)' : 'translateX(100%)',
+    }}>
       {/* Panel header */}
-      <div style={panelHeaderStyle}>
+      <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
         <div style={mainTabBarStyle}>
           {MAIN_TABS.map(tab => (
             <button
               key={tab.id}
               style={{
                 ...mainTabBtnStyle,
-                ...(activeTab === tab.id ? mainTabActivStyle : {}),
+                color: activeTab === tab.id ? t.accentText : t.textMuted,
+                background: activeTab === tab.id ? t.accentBg : 'transparent',
+                borderBottomColor: activeTab === tab.id ? t.accent : 'transparent',
               }}
               onClick={() => onTabChange(tab.id)}
             >
@@ -167,7 +189,7 @@ export function NotesPanel({
             </button>
           ))}
         </div>
-        <button style={closeBtnStyle} onClick={onClose} title="Close">
+        <button style={{ ...closeBtnStyle, color: t.textMuted, borderLeftColor: t.borderSubtle }} onClick={onClose} title="Close">
           <CloseSvg />
         </button>
       </div>
@@ -301,6 +323,39 @@ const emptyStyle: React.CSSProperties = {
   color: 'rgba(255,255,255,0.25)',
   fontSize: 13,
   fontFamily: 'Inter, sans-serif',
+};
+
+interface ThemeTokens {
+  panelBg: string;
+  border: string;
+  borderSubtle: string;
+  textStrong: string;
+  textMuted: string;
+  accent: string;
+  accentBg: string;
+  accentText: string;
+}
+
+const DARK_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(14,10,28,0.97)',
+  border: 'rgba(255,255,255,0.1)',
+  borderSubtle: 'rgba(255,255,255,0.07)',
+  textStrong: 'rgba(255,255,255,0.85)',
+  textMuted: 'rgba(255,255,255,0.4)',
+  accent: 'rgba(167,139,250,0.7)',
+  accentBg: 'rgba(167,139,250,0.08)',
+  accentText: '#c4b5fd',
+};
+
+const LIGHT_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(250,248,255,0.98)',
+  border: 'rgba(0,0,0,0.1)',
+  borderSubtle: 'rgba(0,0,0,0.06)',
+  textStrong: 'rgba(15,10,30,0.9)',
+  textMuted: 'rgba(15,10,30,0.45)',
+  accent: 'rgba(109,72,220,0.7)',
+  accentBg: 'rgba(109,72,220,0.08)',
+  accentText: '#6d48dc',
 };
 
 function CloseSvg() {
