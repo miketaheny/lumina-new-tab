@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "wxt prepare && tsc --noEmit"
   },
   "dependencies": {
     "@lumina/core": "*",
@@ -15,7 +15,6 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.300",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@wxt-dev/module-react": "1.1.5",
