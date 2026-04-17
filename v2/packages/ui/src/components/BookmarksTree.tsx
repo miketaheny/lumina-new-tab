@@ -36,6 +36,27 @@ function removeNode(roots: BookmarkNode[], id: string): BookmarkNode[] {
     .map(n => n.children ? { ...n, children: removeNode(n.children, id) } : n);
 }
 
+function insertNode(roots: BookmarkNode[], targetFolderId: string | null, node: BookmarkNode): BookmarkNode[] {
+  if (!targetFolderId) return [...roots, { ...node, parentId: null }];
+  return roots.map(n => {
+    if (n.id === targetFolderId) {
+      return { ...n, children: [...(n.children ?? []), { ...node, parentId: targetFolderId }] };
+    }
+    if (n.children) return { ...n, children: insertNode(n.children, targetFolderId, node) };
+    return n;
+  });
+}
+
+function collectFolders(roots: BookmarkNode[], excludeId: string, depth = 0): Array<{ node: BookmarkNode; depth: number }> {
+  const result: Array<{ node: BookmarkNode; depth: number }> = [];
+  for (const n of roots) {
+    if (n.type !== 'folder' || n.id === excludeId) continue;
+    result.push({ node: n, depth });
+    if (n.children) result.push(...collectFolders(n.children, excludeId, depth + 1));
+  }
+  return result;
+}
+
 type ModalState =
   | { type: 'add-folder'; parentId: string }
   | { type: 'edit-folder'; node: BookmarkNode }
@@ -48,6 +69,7 @@ export function BookmarksTree() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<ModalState>(null);
   const [showImport, setShowImport] = useState(false);
+  const [moveNode, setMoveNode] = useState<BookmarkNode | null>(null);
 
   useEffect(() => {
     storage.getBookmarks().then(setData);
@@ -84,26 +106,21 @@ export function BookmarksTree() {
     persist({ ...data, roots: removeNode(data.roots, node.id), updatedAt: new Date().toISOString() });
   }
 
-  function handleImportLinks(links: { url: string; label: string }[]) {
-    const folderId = `bm-folder-${Date.now()}`;
-    const imported: BookmarkNode[] = links.map((l, i) => ({
-      id: `bm-import-${Date.now()}-${i}`,
-      parentId: folderId,
-      type: 'bookmark' as const,
-      title: l.label,
-      url: l.url,
-      sortOrder: i,
-    }));
-    const folder: BookmarkNode = {
-      id: folderId,
-      parentId: null,
-      type: 'folder',
-      title: 'Imported Bookmarks',
-      children: imported,
-      sortOrder: data.roots.length,
-    };
-    persist({ ...data, roots: [...data.roots, folder], updatedAt: new Date().toISOString() });
+  function handleImportNodes(nodes: BookmarkNode[]) {
+    const nextRoots = [...data.roots];
+    for (const node of nodes) {
+      nextRoots.push({ ...node, parentId: null, sortOrder: nextRoots.length });
+    }
+    persist({ ...data, roots: nextRoots, updatedAt: new Date().toISOString() });
     setShowImport(false);
+  }
+
+  function handleMoveToFolder(targetFolderId: string | null) {
+    if (!moveNode) return;
+    const stripped = removeNode(data.roots, moveNode.id);
+    const updated = insertNode(stripped, targetFolderId, moveNode);
+    persist({ ...data, roots: updated, updatedAt: new Date().toISOString() });
+    setMoveNode(null);
   }
 
   const query = search.trim().toLowerCase();
@@ -160,6 +177,7 @@ export function BookmarksTree() {
               onDeleteFolder={handleDeleteFolder}
               onEditBookmark={node => setModal({ type: 'edit-bookmark', node })}
               onDeleteBookmark={handleDeleteBookmark}
+              onMove={setMoveNode}
             />
           ))
         )}
@@ -167,7 +185,7 @@ export function BookmarksTree() {
 
       {showImport && (
         <BookmarkSyncModal
-          onImport={handleImportLinks}
+          onImport={handleImportNodes}
           onClose={() => setShowImport(false)}
         />
       )}
@@ -184,6 +202,37 @@ export function BookmarksTree() {
           onSave={persist}
           onClose={() => setModal(null)}
         />
+      )}
+      {moveNode && (
+        <div style={moveOverlayStyle} onClick={e => { if (e.target === e.currentTarget) setMoveNode(null); }}>
+          <div style={moveModalStyle}>
+            <div style={moveHeaderStyle}>
+              <span style={moveTitleStyle}>Move "{moveNode.title}"</span>
+              <button style={moveCloseBtnStyle} onClick={() => setMoveNode(null)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div style={moveBodyStyle}>
+              <button
+                style={moveFolderBtnStyle}
+                onClick={() => handleMoveToFolder(null)}
+              >
+                Root
+              </button>
+              {collectFolders(data.roots, moveNode.id).map(({ node: f, depth }) => (
+                <button
+                  key={f.id}
+                  style={{ ...moveFolderBtnStyle, paddingLeft: 12 + depth * 14 }}
+                  onClick={() => handleMoveToFolder(f.id)}
+                >
+                  {f.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -255,6 +304,85 @@ const emptyStyle: React.CSSProperties = {
   color: 'rgba(255,255,255,0.25)',
   fontSize: 12,
   fontFamily: 'Inter, sans-serif',
+};
+
+const moveOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 200,
+  background: 'rgba(0,0,0,0.55)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const moveModalStyle: React.CSSProperties = {
+  width: 300,
+  maxWidth: '90vw',
+  maxHeight: '60vh',
+  display: 'flex',
+  flexDirection: 'column',
+  background: 'rgba(20,15,40,0.98)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: 14,
+  boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+  backdropFilter: 'blur(20px)',
+};
+
+const moveHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '14px 16px 10px',
+  borderBottom: '1px solid rgba(255,255,255,0.07)',
+  flexShrink: 0,
+};
+
+const moveTitleStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: 'rgba(255,255,255,0.85)',
+  fontFamily: 'Inter, sans-serif',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const moveCloseBtnStyle: React.CSSProperties = {
+  width: 26,
+  height: 26,
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.05)',
+  color: 'rgba(255,255,255,0.45)',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+};
+
+const moveBodyStyle: React.CSSProperties = {
+  flex: 1,
+  overflowY: 'auto',
+  padding: '8px 10px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+};
+
+const moveFolderBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '7px 12px',
+  borderRadius: 7,
+  border: '1px solid rgba(255,255,255,0.06)',
+  background: 'transparent',
+  color: 'rgba(255,255,255,0.7)',
+  fontSize: 12,
+  fontFamily: 'Inter, sans-serif',
+  cursor: 'pointer',
+  textAlign: 'left',
 };
 
 function SearchSvg() {
