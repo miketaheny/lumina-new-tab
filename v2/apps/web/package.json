@@ -6,7 +6,8 @@
     "dev": "next dev --port 3100",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@lumina/core": "*",
@@ -17,6 +18,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "25.6.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0"
