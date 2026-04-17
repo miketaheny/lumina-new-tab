@@ -31,6 +31,18 @@ export function SearchBar({ searchEngine = 'claude' }: SearchBarProps) {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    function handleGlobalKey(e: KeyboardEvent) {
+      if (e.key !== '/') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    }
+    document.addEventListener('keydown', handleGlobalKey);
+    return () => document.removeEventListener('keydown', handleGlobalKey);
+  }, []);
+
   function switchEngine(key: string) {
     setEngine(key);
     setShowPicker(false);
