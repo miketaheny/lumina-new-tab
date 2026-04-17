@@ -3,5 +3,6 @@ dist/
 .next/
 out/
 .output/
+.wxt/
 .turbo/
 *.tsbuildinfo
