@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { storage, type LuminaSettings, DEFAULT_SETTINGS } from '@lumina/core';
-import { setAuthProvider, setupSyncListeners, onSyncStatus } from '@lumina/drive';
+import { setAuthProvider, setupSyncListeners, onSyncStatus, pullAll } from '@lumina/drive';
 import {
   LuminaShell, BackgroundCanvas, Clock, SearchBar,
   QuickLinks, FocusLine, Weather, BibleVerse,
@@ -44,6 +44,15 @@ function NewTab() {
     setActivePanel(prev => prev === panel ? null : panel);
   };
 
+  const handleSignIn = useCallback(async () => {
+    await extensionAuthProvider.signIn();
+    await pullAll();
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await extensionAuthProvider.signOut();
+  }, []);
+
   if (!ready) return null;
 
   return (
@@ -54,6 +63,8 @@ function NewTab() {
           <SettingsPanel
             open={activePanel === 'settings'}
             onClose={() => setActivePanel(null)}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
           />
           <NotesPanel
             open={activePanel === 'notes'}
@@ -78,8 +89,8 @@ function NewTab() {
       <FocusLine focusLines={settings.focusLines} focusText={settings.focusText} />
       <SearchBar searchEngine={settings.searchEngine} />
       <QuickLinks onDirty={handleDirty} />
+      <BibleVerse showQuote={settings.showQuote} />
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8 }}>
-        <BibleVerse showQuote={settings.showQuote} />
         <Weather
           postalCode={settings.postalCode}
           weatherUnit={settings.weatherUnit}

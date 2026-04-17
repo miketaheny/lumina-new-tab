@@ -55,7 +55,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
+      background: rgba(0, 0, 0, 0.45);
     }
 
     #bg-wallpaper.active {
@@ -86,8 +86,8 @@
     }
 
     body.wallpaper-active #search-form {
-      background: transparent;
-      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.35);
+      border-color: rgba(255, 255, 255, 0.2);
     }
 
     body.wallpaper-active #search-input {
@@ -130,26 +130,27 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      max-width: 900px;
+      max-width: 1600px;
       width: 100%;
       margin: 0 auto;
-      padding: 0 32px 60px;
-      transition: margin 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0 24px 100px;
+      transition: padding-right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     body.notes-open #app {
-      margin-right: clamp(340px, 40vw, 800px);
+      padding-right: calc(clamp(340px, 33.33vw, 580px) + 24px);
     }
 
     @media (max-width: 768px) {
       body.notes-open #app {
-        margin-right: auto;
+        padding-right: 24px;
       }
     }
 
     /* ─── TOP BAR ─── */
     #topbar {
       width: 100%;
+      max-width: 860px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -293,17 +294,18 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(28px) saturate(1.4);
       border-radius: 18px;
       padding: 6px 6px 6px 20px;
       transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
     }
 
     #search-form:focus-within {
-      border-color: rgba(167, 139, 250, 0.3);
-      box-shadow: none;
-      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(167, 139, 250, 0.5);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1), 0 8px 40px rgba(0, 0, 0, 0.25);
+      background: rgba(255, 255, 255, 0.12);
     }
 
     #claude-logo {
@@ -1734,12 +1736,27 @@
 
     /* ─── BIBLE VERSE ─── */
     #quote-wrap {
-      margin-top: auto;
-      padding-top: 40px;
+      position: fixed;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      z-index: 3;
       text-align: center;
       max-width: 480px;
+      margin: 0 auto;
       opacity: 0;
       animation: fadeUp 0.6s ease 0.6s forwards;
+      pointer-events: none;
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #quote-wrap > * {
+      pointer-events: auto;
+    }
+
+    body.notes-open #quote-wrap {
+      right: clamp(340px, 33.33vw, 580px);
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     #quote-link {
@@ -2250,20 +2267,20 @@
       top: 0;
       bottom: 0;
       z-index: 90;
-      width: clamp(340px, 40vw, 800px);
+      width: clamp(340px, 33.33vw, 580px);
       max-width: 100vw;
       /* panel-scoped CSS variables — dark by default */
-      --text: rgba(255, 255, 255, 0.88);
-      --text-muted: rgba(255, 255, 255, 0.55);
-      --glass: rgba(255, 255, 255, 0.08);
-      --glass-border: rgba(255, 255, 255, 0.14);
-      --glass-hover: rgba(255, 255, 255, 0.13);
-      --p-bg: rgba(24, 20, 44, 0.97);
+      --text: rgba(255, 255, 255, 0.72);
+      --text-muted: rgba(255, 255, 255, 0.42);
+      --glass: rgba(255, 255, 255, 0.07);
+      --glass-border: rgba(255, 255, 255, 0.13);
+      --glass-hover: rgba(255, 255, 255, 0.12);
+      --p-bg: rgba(12, 9, 26, 0.97);
       --p-caret: white;
-      --p-placeholder: rgba(255, 255, 255, 0.25);
-      --p-code-bg: rgba(255, 255, 255, 0.09);
-      --p-em: rgba(255, 255, 255, 0.7);
-      --p-chk-border: rgba(255, 255, 255, 0.32);
+      --p-placeholder: rgba(255, 255, 255, 0.18);
+      --p-code-bg: rgba(255, 255, 255, 0.08);
+      --p-em: rgba(255, 255, 255, 0.58);
+      --p-chk-border: rgba(255, 255, 255, 0.28);
       background: var(--p-bg);
       border-left: 1px solid var(--glass-border);
       backdrop-filter: blur(30px);

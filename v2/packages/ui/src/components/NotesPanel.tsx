@@ -49,41 +49,49 @@ export function NotesPanel({
     });
   }, [open]);
 
-  const saveNotes = useCallback(async (nextNotes: Note[]) => {
-    await storage.setNotes(nextNotes.map(n => ({ ...n, updatedAt: new Date().toISOString() })));
-    await markDirty('notes');
+  const saveNotes = useCallback(async (nextNotes: Note[], dirtyIds?: string[]) => {
+    const stamped = nextNotes.map(n => ({ ...n, updatedAt: new Date().toISOString() }));
+    await storage.setNotes(stamped);
+    const ids = dirtyIds ?? stamped.map(n => n.id);
+    for (const id of ids) {
+      await markDirty('notes', id);
+    }
     schedulePush();
   }, []);
+
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushNote = useCallback((noteId: string, notesSnapshot?: Note[]) => {
+    const markdown = pendingContentRef.current.get(noteId);
+    if (markdown === undefined) return;
+    pendingContentRef.current.delete(noteId);
+    const source = notesSnapshot ?? notes;
+    const next = source.map(n => n.id === noteId ? { ...n, content: markdown } : n);
+    setNotes(next);
+    saveNotes(next, [noteId]);
+  }, [notes, saveNotes]);
 
   const handleContentChange = useCallback((markdown: string) => {
     if (!activeNoteId) return;
     pendingContentRef.current.set(activeNoteId, markdown);
     setNotes(prev => prev.map(n => n.id === activeNoteId ? { ...n, content: markdown } : n));
-  }, [activeNoteId]);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      autoSaveTimer.current = null;
+      flushNote(activeNoteId);
+    }, 2000);
+  }, [activeNoteId, flushNote]);
 
   const handleSave = useCallback(() => {
     if (!activeNoteId) return;
-    const markdown = pendingContentRef.current.get(activeNoteId);
-    if (markdown === undefined) return;
-    setNotes(prev => {
-      const next = prev.map(n => n.id === activeNoteId ? { ...n, content: markdown } : n);
-      saveNotes(next);
-      return next;
-    });
-  }, [activeNoteId, saveNotes]);
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+    flushNote(activeNoteId);
+  }, [activeNoteId, flushNote]);
 
   function switchNote(id: string) {
-    // flush current note first
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     if (activeNoteId) {
-      const pending = pendingContentRef.current.get(activeNoteId);
-      if (pending !== undefined) {
-        setNotes(prev => {
-          const next = prev.map(n => n.id === activeNoteId ? { ...n, content: pending } : n);
-          saveNotes(next);
-          return next;
-        });
-        pendingContentRef.current.delete(activeNoteId);
-      }
+      flushNote(activeNoteId);
     }
     setActiveNoteId(id);
     setNotes(prev => {
@@ -97,12 +105,12 @@ export function NotesPanel({
   }
 
   function addNote() {
+    const id = `note-${Date.now()}`;
     setNotes(prev => {
-      const id = `note-${Date.now()}`;
       const title = uniqueTitle(prev);
       const newNote: Note = { id, title, content: '', sortOrder: prev.length, updatedAt: new Date().toISOString() };
       const next = [...prev, newNote];
-      saveNotes(next);
+      saveNotes(next, [id]);
       setActiveNoteId(id);
       setEditorContent('');
       storage.getSettings().then(s => {
@@ -134,7 +142,7 @@ export function NotesPanel({
   function renameNote(id: string, title: string) {
     setNotes(prev => {
       const next = prev.map(n => n.id === id ? { ...n, title } : n);
-      saveNotes(next);
+      saveNotes(next, [id]);
       return next;
     });
   }
@@ -216,7 +224,7 @@ const panelStyle: React.CSSProperties = {
   right: 0,
   top: 0,
   bottom: 0,
-  width: 380,
+  width: 'clamp(420px, 40vw, 800px)',
   maxWidth: '100vw',
   zIndex: 90,
   background: 'rgba(14,10,28,0.97)',
@@ -226,6 +234,7 @@ const panelStyle: React.CSSProperties = {
   flexDirection: 'column',
   transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
   boxShadow: '-4px 0 40px rgba(0,0,0,0.5)',
+  pointerEvents: 'auto',
 };
 
 const panelHeaderStyle: React.CSSProperties = {

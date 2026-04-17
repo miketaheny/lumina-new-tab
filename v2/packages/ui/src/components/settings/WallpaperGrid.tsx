@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { storage } from '@lumina/core';
 import type { WallpapersManifest, WallpaperEntry } from '@lumina/core';
 
 const WP_EMOJIS = ['🌅','🌌','⛰️','🌊','🌲','🌠','🏙️','🏜️','⚡','🌸','🍂','❄️','🌋','🏖️','🌃','🌄','🌿','🦋','🎑','🏔️','🌺','🌙','☁️','🌈','🌾','🏕️','🐚','🦅','🌏','🎋','🗻','🌻','🌴','🏞️','🦁','🐬'];
@@ -53,30 +54,27 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
     setEditState(null);
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    files.forEach(file => {
+    let current = manifest;
+    for (const file of files) {
       const name = file.name.replace(/\.[^.]+$/, '');
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const dataUrl = ev.target?.result as string;
-        if (!dataUrl) return;
-        const id = 'wp-u-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-        const newWp: WallpaperEntry = {
-          id,
-          source: 'drive',
-          label: name,
-          emoji: addEmoji,
-          isActive: false,
-        };
-        onChange({
-          ...manifest,
-          wallpapers: [...manifest.wallpapers, newWp],
-        });
+      const id = 'wp-u-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      await storage.setWallpaperBlob(id, file);
+      const newWp: WallpaperEntry = {
+        id,
+        source: 'drive',
+        label: name,
+        emoji: addEmoji,
+        isActive: false,
       };
-      reader.readAsDataURL(file);
-    });
+      current = {
+        ...current,
+        wallpapers: [...current.wallpapers, newWp],
+      };
+    }
+    onChange(current);
     e.target.value = '';
   }
 
