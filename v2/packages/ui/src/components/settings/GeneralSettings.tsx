@@ -102,6 +102,23 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           maxLength={32}
         />
       </div>
+      <ToggleRow
+        label="Custom Greeting"
+        value={settings.greetingCustom}
+        onToggle={() => set('greetingCustom', !settings.greetingCustom)}
+      />
+      {settings.greetingCustom && (
+        <div style={fieldStyle}>
+          <label style={fieldLabelStyle}>Greeting Text</label>
+          <input
+            style={inputStyle}
+            value={settings.greetingCustomText}
+            onChange={e => set('greetingCustomText', e.target.value)}
+            placeholder="Your custom greeting"
+            maxLength={80}
+          />
+        </div>
+      )}
     </div>
   );
 }

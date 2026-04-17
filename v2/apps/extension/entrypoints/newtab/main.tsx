@@ -115,7 +115,13 @@ function NewTab() {
       wallpaperUrl={wallpaperUrl}
       showGrain={settings.showGrain}
     >
-      {settings.showClock && <Clock />}
+      {settings.showClock && (
+        <Clock
+          greetingName={settings.greetingName}
+          greetingCustom={settings.greetingCustom}
+          greetingCustomText={settings.greetingCustomText}
+        />
+      )}
       <FocusLine focusLines={settings.focusLines} focusText={settings.focusText} />
       <SearchBar searchEngine={settings.searchEngine} />
       <QuickLinks onDirty={handleDirty} />
