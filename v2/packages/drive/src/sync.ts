@@ -10,7 +10,9 @@ import type { DriveFile } from './drive-client';
 let syncInProgress = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
-const JSON_FILES: Record<string, SyncDomain> = {
+type JsonSyncDomain = Exclude<SyncDomain, 'notes'>;
+
+const JSON_FILES: Record<string, JsonSyncDomain> = {
   'settings.json': 'settings',
   'quick-links.json': 'quickLinks',
   'kindling.json': 'kindling',
@@ -91,7 +93,7 @@ async function pushChanges(): Promise<void> {
 }
 
 async function pushJsonDomain(
-  domain: SyncDomain,
+  domain: JsonSyncDomain,
   folderId: string,
   fileMap: Map<string, DriveFile>,
 ): Promise<void> {
