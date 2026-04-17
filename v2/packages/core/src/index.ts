@@ -11,3 +11,5 @@ export type { WeatherData, GeoResult } from './weather';
 export { VERSE_REFS } from './bible-verses';
 export type { VerseRef } from './bible-verses';
 export { downloadTextFile, buildQuickLinksMarkdown, buildKindlingMarkdown, exportAllAsJson } from './export';
+export { migrateFromV1, hasV1Data } from './migration';
+export type { MigrationResult } from './migration';
