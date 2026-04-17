@@ -32,6 +32,7 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
   }
 
   function deleteWallpaper(id: string) {
+    storage.deleteWallpaperBlob(id);
     onChange({
       ...manifest,
       wallpapers: wallpapers.filter(w => w.id !== id),
@@ -128,13 +129,11 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
                   <div style={cardNameStyle}>{wp.emoji} {wp.label}</div>
                   <div style={cardBtnsStyle} className="wp-card-btns" onClick={e => e.stopPropagation()}>
                     <button style={cardBtnStyle} title="Edit" onClick={() => startEdit(wp)}>✏</button>
-                    {wp.source === 'drive' && (
-                      <button
-                        style={{ ...cardBtnStyle, color: '#f87171' }}
-                        title="Delete"
-                        onClick={() => deleteWallpaper(wp.id)}
-                      >✕</button>
-                    )}
+                    <button
+                      style={{ ...cardBtnStyle, color: '#f87171' }}
+                      title="Delete"
+                      onClick={() => deleteWallpaper(wp.id)}
+                    >✕</button>
                   </div>
                 </>
               )}
