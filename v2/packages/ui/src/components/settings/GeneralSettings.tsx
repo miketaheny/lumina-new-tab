@@ -90,6 +90,31 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         ))}
       </div>
 
+      <SectionLabel>Focus Line</SectionLabel>
+
+      <div style={fieldStyle}>
+        <label style={fieldLabelStyle}>Override Text (blank uses rotation)</label>
+        <input
+          style={inputStyle}
+          value={settings.focusText}
+          onChange={e => set('focusText', e.target.value)}
+          placeholder="Leave blank for daily rotation"
+          maxLength={120}
+        />
+      </div>
+      <div style={fieldStyle}>
+        <label style={fieldLabelStyle}>Rotating Lines (one per line)</label>
+        <textarea
+          style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+          value={(settings.focusLines ?? []).join('\n')}
+          onChange={e => {
+            const lines = e.target.value.split('\n').filter(l => l.trim());
+            set('focusLines', lines.length ? lines : null);
+          }}
+          placeholder="One focus line per line..."
+        />
+      </div>
+
       <SectionLabel>Greeting</SectionLabel>
 
       <div style={fieldStyle}>
