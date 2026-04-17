@@ -111,7 +111,7 @@ export const storage = {
   },
 
   async getSyncMeta(): Promise<SyncMeta> {
-    return (await getVal<SyncMeta>('syncMeta')) ?? { ...DEFAULT_SYNC_META };
+    return (await getVal<SyncMeta>('syncMeta')) ?? structuredClone(DEFAULT_SYNC_META);
   },
   async setSyncMeta(data: SyncMeta): Promise<void> {
     await setVal('syncMeta', data);

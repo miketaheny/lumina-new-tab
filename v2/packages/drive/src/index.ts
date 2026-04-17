@@ -6,3 +6,5 @@ export {
   readTextFile, readBlobFile, writeTextFile, writeBlobFile, deleteFile,
 } from './drive-client';
 export type { DriveFile } from './drive-client';
+export { markDirty, schedulePush, flushPush, pullAll, setupSyncListeners, onSyncStatus } from './sync';
+export type { SyncStatus, SyncListener } from './sync';
