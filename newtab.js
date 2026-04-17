@@ -3389,9 +3389,11 @@ function markdownToAsanaHtml(md) {
     const task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
     if (task) {
       if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
-      const mark = task[1].toLowerCase() === 'x' ? '<s>' : '';
-      const endMark = mark ? '</s>' : '';
-      out.push(`<li>${mark}${renderInline(task[2])}${endMark}</li>`);
+      if (task[1].toLowerCase() === 'x') {
+        out.push(`<li><s>${renderInline(task[2])}</s></li>`);
+      } else {
+        out.push(`<li>[ ] ${renderInline(task[2])}</li>`);
+      }
       continue;
     }
     const ul = line.match(/^\s*[-*]\s+(.*)$/);
@@ -3454,11 +3456,14 @@ function asanaHtmlToMarkdown(html) {
         case 'ul': {
           const items = Array.from(child.children);
           const strikes = items.map(liStrikeChild);
-          const isTaskList = strikes.some(Boolean);
+          const hasUnchecked = items.map(li => li.textContent.startsWith('[ ] '));
+          const isTaskList = strikes.some(Boolean) || hasUnchecked.some(Boolean);
           if (isTaskList) {
             md += '\n' + items.map((li, i) => {
-              const s = strikes[i];
-              return s ? `- [x] ${walk(s)}` : `- [ ] ${walk(li)}`;
+              if (strikes[i]) return `- [x] ${walk(strikes[i])}`;
+              const content = walk(li);
+              if (hasUnchecked[i]) return `- [ ] ${content.startsWith('[ ] ') ? content.slice(4) : content}`;
+              return `- [ ] ${content}`;
             }).join('\n') + '\n';
           } else {
             md += '\n' + items.map(li => `- ${walk(li)}`).join('\n') + '\n';
