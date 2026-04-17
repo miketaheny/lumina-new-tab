@@ -28,6 +28,14 @@ function LuminaApp() {
   }, []);
 
   useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setActivePanel(null);
+    }
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  useEffect(() => {
     if (settings.bgMode !== 'wallpaper') {
       setWallpaperUrl(undefined);
       return;
