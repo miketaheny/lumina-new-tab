@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: LuminaSettings = {
   qlCollapsed: {},
   activeNoteId: null,
   savedFaviconBg: 'white',
+  addressBook: [],
   updatedAt: new Date().toISOString(),
 };
 
