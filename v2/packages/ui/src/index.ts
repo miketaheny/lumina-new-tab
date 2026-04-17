@@ -13,3 +13,4 @@ export { ThemeGrid } from './components/settings/ThemeGrid';
 export { WallpaperGrid } from './components/settings/WallpaperGrid';
 export { GeneralSettings } from './components/settings/GeneralSettings';
 export { SyncSettings } from './components/settings/SyncSettings';
+export { FocusLine } from './components/FocusLine';
