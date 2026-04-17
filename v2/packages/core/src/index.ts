@@ -8,3 +8,5 @@ export type { ThemeDef } from './themes';
 export { SEARCH_URLS } from './search-engines';
 export { WMO_ICONS, WMO_LABELS, WMO_CODES, geocodePostal, fetchWeatherData } from './weather';
 export type { WeatherData, GeoResult } from './weather';
+export { VERSE_REFS } from './bible-verses';
+export type { VerseRef } from './bible-verses';

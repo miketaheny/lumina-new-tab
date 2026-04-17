@@ -15,3 +15,4 @@ export { GeneralSettings } from './components/settings/GeneralSettings';
 export { SyncSettings } from './components/settings/SyncSettings';
 export { FocusLine } from './components/FocusLine';
 export { Weather } from './components/Weather';
+export { BibleVerse } from './components/BibleVerse';
