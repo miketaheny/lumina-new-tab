@@ -67,11 +67,45 @@ export function BibleVerse({ showQuote = true }: BibleVerseProps) {
 
   if (!showQuote || !verse) return null;
 
+  const quoteWrapStyle: React.CSSProperties = {
+    position: 'fixed',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    zIndex: 3,
+    textAlign: 'center',
+    maxWidth: 480,
+    margin: '0 auto',
+    opacity: 0,
+    animation: 'fadeUp 0.6s ease 0.6s forwards',
+    pointerEvents: 'none',
+  };
+
+  const quoteTextStyle: React.CSSProperties = {
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: 'rgba(255,255,255,0.55)',
+    display: 'block',
+    marginBottom: 6,
+    pointerEvents: 'auto',
+  };
+
+  const quoteLinkStyle: React.CSSProperties = {
+    textDecoration: 'none',
+    pointerEvents: 'auto',
+  };
+
+  const quoteAuthorStyle: React.CSSProperties = {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: '0.04em',
+  };
+
   return (
-    <div id="quote-wrap">
-      <span id="quote-text">&ldquo;{verse.text}&rdquo;</span>
-      <a id="quote-link" href={verse.url} target="_blank" rel="noopener noreferrer">
-        <span id="quote-author">— {verse.reference}</span>
+    <div id="quote-wrap" style={quoteWrapStyle}>
+      <span id="quote-text" style={quoteTextStyle}>&ldquo;{verse.text}&rdquo;</span>
+      <a id="quote-link" href={verse.url} target="_blank" rel="noopener noreferrer" style={quoteLinkStyle}>
+        <span id="quote-author" style={quoteAuthorStyle}>— {verse.reference}</span>
       </a>
     </div>
   );

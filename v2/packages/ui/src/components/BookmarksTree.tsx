@@ -4,6 +4,7 @@ import { markDirty, schedulePush } from '@lumina/drive';
 import type { BookmarkNode, BookmarksData } from '@lumina/core';
 import { BookmarkNodeComponent } from './BookmarkNode';
 import { BookmarkModal } from './BookmarkModal';
+import { BookmarkSyncModal } from './BookmarkSyncModal';
 
 const COLLAPSED_KEY = 'lumina_bm_v2_collapsed';
 
@@ -46,6 +47,7 @@ export function BookmarksTree() {
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<ModalState>(null);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     storage.getBookmarks().then(setData);
@@ -82,6 +84,28 @@ export function BookmarksTree() {
     persist({ ...data, roots: removeNode(data.roots, node.id), updatedAt: new Date().toISOString() });
   }
 
+  function handleImportLinks(links: { url: string; label: string }[]) {
+    const folderId = `bm-folder-${Date.now()}`;
+    const imported: BookmarkNode[] = links.map((l, i) => ({
+      id: `bm-import-${Date.now()}-${i}`,
+      parentId: folderId,
+      type: 'bookmark' as const,
+      title: l.label,
+      url: l.url,
+      sortOrder: i,
+    }));
+    const folder: BookmarkNode = {
+      id: folderId,
+      parentId: null,
+      type: 'folder',
+      title: 'Imported Bookmarks',
+      children: imported,
+      sortOrder: data.roots.length,
+    };
+    persist({ ...data, roots: [...data.roots, folder], updatedAt: new Date().toISOString() });
+    setShowImport(false);
+  }
+
   const query = search.trim().toLowerCase();
   const visible = useMemo(() => {
     if (!query) return data.roots;
@@ -100,6 +124,14 @@ export function BookmarksTree() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <button
+          style={addBtnStyle}
+          title="Import from Chrome"
+          onClick={() => setShowImport(true)}
+        >
+          <ImportSvg />
+          <span style={{ fontSize: 11 }}>Import</span>
+        </button>
         <button
           style={addBtnStyle}
           title="Add bookmark to root"
@@ -133,6 +165,12 @@ export function BookmarksTree() {
         )}
       </div>
 
+      {showImport && (
+        <BookmarkSyncModal
+          onImport={handleImportLinks}
+          onClose={() => setShowImport(false)}
+        />
+      )}
       {modal && (
         <BookmarkModal
           mode={
@@ -223,6 +261,13 @@ function SearchSvg() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  );
+}
+function ImportSvg() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
     </svg>
   );
 }

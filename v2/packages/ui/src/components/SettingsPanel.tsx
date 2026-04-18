@@ -161,6 +161,7 @@ const overlayStyle: React.CSSProperties = {
   inset: 0,
   zIndex: 89,
   background: 'rgba(0,0,0,0.4)',
+  pointerEvents: 'auto',
 };
 
 const panelStyle: React.CSSProperties = {
@@ -168,7 +169,7 @@ const panelStyle: React.CSSProperties = {
   right: 0,
   top: 0,
   bottom: 0,
-  width: 360,
+  width: 'clamp(420px, 40vw, 800px)',
   maxWidth: '100vw',
   zIndex: 90,
   background: 'rgba(14,10,28,0.97)',
@@ -178,6 +179,7 @@ const panelStyle: React.CSSProperties = {
   flexDirection: 'column',
   transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
   boxShadow: '-4px 0 40px rgba(0,0,0,0.5)',
+  pointerEvents: 'auto',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
