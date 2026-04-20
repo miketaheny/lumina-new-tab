@@ -74,7 +74,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       <SectionLabel>Panel Theme</SectionLabel>
       <div style={segmentedStyle}>
-        {(['dark', 'light'] as const).map(t => (
+        {(['dark', 'light', 'system'] as const).map(t => (
           <button
             key={t}
             style={{
@@ -85,9 +85,34 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             }}
             onClick={() => set('panelTheme', t)}
           >
-            {t === 'dark' ? '🌙 Dark' : '☀️ Light'}
+            {t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'System'}
           </button>
         ))}
+      </div>
+
+      <SectionLabel>Focus Line</SectionLabel>
+
+      <div style={fieldStyle}>
+        <label style={fieldLabelStyle}>Override Text (blank uses rotation)</label>
+        <input
+          style={inputStyle}
+          value={settings.focusText}
+          onChange={e => set('focusText', e.target.value)}
+          placeholder="Leave blank for daily rotation"
+          maxLength={120}
+        />
+      </div>
+      <div style={fieldStyle}>
+        <label style={fieldLabelStyle}>Rotating Lines (one per line)</label>
+        <textarea
+          style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+          value={(settings.focusLines ?? []).join('\n')}
+          onChange={e => {
+            const lines = e.target.value.split('\n').filter(l => l.trim());
+            set('focusLines', lines.length ? lines : null);
+          }}
+          placeholder="One focus line per line..."
+        />
       </div>
 
       <SectionLabel>Greeting</SectionLabel>
@@ -102,6 +127,23 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           maxLength={32}
         />
       </div>
+      <ToggleRow
+        label="Custom Greeting"
+        value={settings.greetingCustom}
+        onToggle={() => set('greetingCustom', !settings.greetingCustom)}
+      />
+      {settings.greetingCustom && (
+        <div style={fieldStyle}>
+          <label style={fieldLabelStyle}>Greeting Text</label>
+          <input
+            style={inputStyle}
+            value={settings.greetingCustomText}
+            onChange={e => set('greetingCustomText', e.target.value)}
+            placeholder="Your custom greeting"
+            maxLength={80}
+          />
+        </div>
+      )}
     </div>
   );
 }

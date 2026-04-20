@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { storage } from '@lumina/core';
 import { markDirty, schedulePush } from '@lumina/drive';
-import type { Note } from '@lumina/core';
+import type { Note, LuminaSettings } from '@lumina/core';
 import { NoteEditor } from './NoteEditor';
 import { NoteTabBar } from './NoteTabBar';
 
@@ -36,12 +36,27 @@ export function NotesPanel({
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
   const pendingContentRef = useRef<Map<string, string>>(new Map());
+  const [panelTheme, setPanelTheme] = useState<LuminaSettings['panelTheme']>('dark');
+
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const isDark = panelTheme === 'system' ? systemDark : panelTheme === 'dark';
+  const t = useMemo(() => isDark ? DARK_TOKENS : LIGHT_TOKENS, [isDark]);
 
   useEffect(() => {
     if (!open) return;
     Promise.all([storage.getNotes(), storage.getSettings()]).then(([ns, settings]) => {
       const loaded = ns.length > 0 ? ns : [{ id: 'note-default', title: 'Notes', content: '', sortOrder: 0, updatedAt: new Date().toISOString() }];
       setNotes(loaded);
+      setPanelTheme(settings.panelTheme ?? 'dark');
       const activeId = settings.activeNoteId ?? loaded[0].id;
       setActiveNoteId(activeId);
       const note = loaded.find(n => n.id === activeId) ?? loaded[0];
@@ -49,41 +64,49 @@ export function NotesPanel({
     });
   }, [open]);
 
-  const saveNotes = useCallback(async (nextNotes: Note[]) => {
-    await storage.setNotes(nextNotes.map(n => ({ ...n, updatedAt: new Date().toISOString() })));
-    await markDirty('notes');
+  const saveNotes = useCallback(async (nextNotes: Note[], dirtyIds?: string[]) => {
+    const stamped = nextNotes.map(n => ({ ...n, updatedAt: new Date().toISOString() }));
+    await storage.setNotes(stamped);
+    const ids = dirtyIds ?? stamped.map(n => n.id);
+    for (const id of ids) {
+      await markDirty('notes', id);
+    }
     schedulePush();
   }, []);
+
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushNote = useCallback((noteId: string, notesSnapshot?: Note[]) => {
+    const markdown = pendingContentRef.current.get(noteId);
+    if (markdown === undefined) return;
+    pendingContentRef.current.delete(noteId);
+    const source = notesSnapshot ?? notes;
+    const next = source.map(n => n.id === noteId ? { ...n, content: markdown } : n);
+    setNotes(next);
+    saveNotes(next, [noteId]);
+  }, [notes, saveNotes]);
 
   const handleContentChange = useCallback((markdown: string) => {
     if (!activeNoteId) return;
     pendingContentRef.current.set(activeNoteId, markdown);
     setNotes(prev => prev.map(n => n.id === activeNoteId ? { ...n, content: markdown } : n));
-  }, [activeNoteId]);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      autoSaveTimer.current = null;
+      flushNote(activeNoteId);
+    }, 2000);
+  }, [activeNoteId, flushNote]);
 
   const handleSave = useCallback(() => {
     if (!activeNoteId) return;
-    const markdown = pendingContentRef.current.get(activeNoteId);
-    if (markdown === undefined) return;
-    setNotes(prev => {
-      const next = prev.map(n => n.id === activeNoteId ? { ...n, content: markdown } : n);
-      saveNotes(next);
-      return next;
-    });
-  }, [activeNoteId, saveNotes]);
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+    flushNote(activeNoteId);
+  }, [activeNoteId, flushNote]);
 
   function switchNote(id: string) {
-    // flush current note first
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     if (activeNoteId) {
-      const pending = pendingContentRef.current.get(activeNoteId);
-      if (pending !== undefined) {
-        setNotes(prev => {
-          const next = prev.map(n => n.id === activeNoteId ? { ...n, content: pending } : n);
-          saveNotes(next);
-          return next;
-        });
-        pendingContentRef.current.delete(activeNoteId);
-      }
+      flushNote(activeNoteId);
     }
     setActiveNoteId(id);
     setNotes(prev => {
@@ -97,12 +120,12 @@ export function NotesPanel({
   }
 
   function addNote() {
+    const id = `note-${Date.now()}`;
     setNotes(prev => {
-      const id = `note-${Date.now()}`;
       const title = uniqueTitle(prev);
       const newNote: Note = { id, title, content: '', sortOrder: prev.length, updatedAt: new Date().toISOString() };
       const next = [...prev, newNote];
-      saveNotes(next);
+      saveNotes(next, [id]);
       setActiveNoteId(id);
       setEditorContent('');
       storage.getSettings().then(s => {
@@ -134,7 +157,7 @@ export function NotesPanel({
   function renameNote(id: string, title: string) {
     setNotes(prev => {
       const next = prev.map(n => n.id === id ? { ...n, title } : n);
-      saveNotes(next);
+      saveNotes(next, [id]);
       return next;
     });
   }
@@ -142,16 +165,23 @@ export function NotesPanel({
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   return (
-    <div style={{ ...panelStyle, transform: open ? 'translateX(0)' : 'translateX(100%)' }}>
+    <div style={{
+      ...panelStyle,
+      background: t.panelBg,
+      borderLeft: `1px solid ${t.border}`,
+      transform: open ? 'translateX(0)' : 'translateX(100%)',
+    }}>
       {/* Panel header */}
-      <div style={panelHeaderStyle}>
+      <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
         <div style={mainTabBarStyle}>
           {MAIN_TABS.map(tab => (
             <button
               key={tab.id}
               style={{
                 ...mainTabBtnStyle,
-                ...(activeTab === tab.id ? mainTabActivStyle : {}),
+                color: activeTab === tab.id ? t.accentText : t.textMuted,
+                background: activeTab === tab.id ? t.accentBg : 'transparent',
+                borderBottomColor: activeTab === tab.id ? t.accent : 'transparent',
               }}
               onClick={() => onTabChange(tab.id)}
             >
@@ -159,7 +189,7 @@ export function NotesPanel({
             </button>
           ))}
         </div>
-        <button style={closeBtnStyle} onClick={onClose} title="Close">
+        <button style={{ ...closeBtnStyle, color: t.textMuted, borderLeftColor: t.borderSubtle }} onClick={onClose} title="Close">
           <CloseSvg />
         </button>
       </div>
@@ -216,7 +246,7 @@ const panelStyle: React.CSSProperties = {
   right: 0,
   top: 0,
   bottom: 0,
-  width: 380,
+  width: 'clamp(420px, 40vw, 800px)',
   maxWidth: '100vw',
   zIndex: 90,
   background: 'rgba(14,10,28,0.97)',
@@ -226,6 +256,7 @@ const panelStyle: React.CSSProperties = {
   flexDirection: 'column',
   transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
   boxShadow: '-4px 0 40px rgba(0,0,0,0.5)',
+  pointerEvents: 'auto',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
@@ -292,6 +323,39 @@ const emptyStyle: React.CSSProperties = {
   color: 'rgba(255,255,255,0.25)',
   fontSize: 13,
   fontFamily: 'Inter, sans-serif',
+};
+
+interface ThemeTokens {
+  panelBg: string;
+  border: string;
+  borderSubtle: string;
+  textStrong: string;
+  textMuted: string;
+  accent: string;
+  accentBg: string;
+  accentText: string;
+}
+
+const DARK_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(14,10,28,0.97)',
+  border: 'rgba(255,255,255,0.1)',
+  borderSubtle: 'rgba(255,255,255,0.07)',
+  textStrong: 'rgba(255,255,255,0.85)',
+  textMuted: 'rgba(255,255,255,0.4)',
+  accent: 'rgba(167,139,250,0.7)',
+  accentBg: 'rgba(167,139,250,0.08)',
+  accentText: '#c4b5fd',
+};
+
+const LIGHT_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(250,248,255,0.98)',
+  border: 'rgba(0,0,0,0.1)',
+  borderSubtle: 'rgba(0,0,0,0.06)',
+  textStrong: 'rgba(15,10,30,0.9)',
+  textMuted: 'rgba(15,10,30,0.45)',
+  accent: 'rgba(109,72,220,0.7)',
+  accentBg: 'rgba(109,72,220,0.08)',
+  accentText: '#6d48dc',
 };
 
 function CloseSvg() {

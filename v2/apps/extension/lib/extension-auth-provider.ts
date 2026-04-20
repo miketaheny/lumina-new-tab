@@ -2,8 +2,12 @@ import type { AuthProvider, UserProfile } from '@lumina/drive';
 
 export const extensionAuthProvider: AuthProvider = {
   async getAccessToken() {
-    const result = await chrome.identity.getAuthToken({ interactive: false });
-    return result?.token ?? null;
+    try {
+      const result = await chrome.identity.getAuthToken({ interactive: false });
+      return result?.token ?? null;
+    } catch {
+      return null;
+    }
   },
 
   async signIn() {
@@ -15,12 +19,16 @@ export const extensionAuthProvider: AuthProvider = {
   },
 
   async signOut() {
-    const result = await chrome.identity.getAuthToken({ interactive: false });
-    const token = result?.token;
-    if (token) {
-      await new Promise<void>((resolve) => {
-        chrome.identity.removeCachedAuthToken({ token }, () => resolve());
-      });
+    try {
+      const result = await chrome.identity.getAuthToken({ interactive: false });
+      const token = result?.token;
+      if (token) {
+        await new Promise<void>((resolve) => {
+          chrome.identity.removeCachedAuthToken({ token }, () => resolve());
+        });
+      }
+    } catch {
+      // No token to revoke
     }
   },
 

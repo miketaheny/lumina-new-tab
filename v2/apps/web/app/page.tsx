@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { storage, type LuminaSettings, DEFAULT_SETTINGS } from '@lumina/core';
-import { onSyncStatus } from '@lumina/drive';
+import { onSyncStatus, pullAll } from '@lumina/drive';
+import { webAuthProvider } from '../lib/web-auth-provider';
 import {
   LuminaShell, BackgroundCanvas, Clock, SearchBar,
   QuickLinks, FocusLine, Weather, BibleVerse,
@@ -18,12 +19,41 @@ function LuminaApp() {
   const [activePanel, setActivePanel] = useState<PanelId>(null);
   const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling'>('notes');
   const [showWizard, setShowWizard] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
 
   useEffect(() => {
     storage.getSettings().then(setSettings);
     const cleanup = onSyncStatus(() => {});
     return cleanup;
   }, []);
+
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setActivePanel(null);
+    }
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  useEffect(() => {
+    if (settings.bgMode !== 'wallpaper') {
+      setWallpaperUrl(undefined);
+      return;
+    }
+    let revoked = false;
+    (async () => {
+      const manifest = await storage.getWallpapers();
+      const active = manifest.wallpapers.filter(w => manifest.activeIds.includes(w.id));
+      if (!active.length) return;
+      const pick = active[Math.floor(Math.random() * active.length)];
+      const blob = await storage.getWallpaperBlob(pick.id);
+      if (blob && !revoked) {
+        const url = URL.createObjectURL(blob);
+        setWallpaperUrl(url);
+      }
+    })();
+    return () => { revoked = true; };
+  }, [settings.bgMode]);
 
   const handleDirty = useCallback(async () => {
     const updated = await storage.getSettings();
@@ -34,6 +64,15 @@ function LuminaApp() {
     setActivePanel(prev => prev === panel ? null : panel);
   };
 
+  const handleSignIn = useCallback(async () => {
+    await webAuthProvider.signIn();
+    await pullAll();
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await webAuthProvider.signOut();
+  }, []);
+
   return (
     <LuminaShell
       panelOpen={activePanel !== null}
@@ -42,6 +81,8 @@ function LuminaApp() {
           <SettingsPanel
             open={activePanel === 'settings'}
             onClose={() => setActivePanel(null)}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
           />
           <NotesPanel
             open={activePanel === 'notes'}
@@ -60,14 +101,21 @@ function LuminaApp() {
           intensity={settings.intensity}
         />
       ) : undefined}
+      wallpaperUrl={wallpaperUrl}
       showGrain={settings.showGrain}
     >
-      {settings.showClock && <Clock />}
+      {settings.showClock && (
+        <Clock
+          greetingName={settings.greetingName}
+          greetingCustom={settings.greetingCustom}
+          greetingCustomText={settings.greetingCustomText}
+        />
+      )}
       <FocusLine focusLines={settings.focusLines} focusText={settings.focusText} />
       <SearchBar searchEngine={settings.searchEngine} />
       <QuickLinks onDirty={handleDirty} />
+      <BibleVerse showQuote={settings.showQuote} />
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8 }}>
-        <BibleVerse showQuote={settings.showQuote} />
         <Weather
           postalCode={settings.postalCode}
           weatherUnit={settings.weatherUnit}

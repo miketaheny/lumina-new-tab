@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { storage, type LuminaSettings, DEFAULT_SETTINGS } from '@lumina/core';
-import { setAuthProvider, setupSyncListeners, onSyncStatus } from '@lumina/drive';
+import { setAuthProvider, setupSyncListeners, onSyncStatus, pullAll } from '@lumina/drive';
 import {
   LuminaShell, BackgroundCanvas, Clock, SearchBar,
   QuickLinks, FocusLine, Weather, BibleVerse,
@@ -21,6 +21,7 @@ function NewTab() {
   const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling'>('notes');
   const [ready, setReady] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
 
   useEffect(() => {
     storage.getSettings().then((s) => {
@@ -35,6 +36,34 @@ function NewTab() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setActivePanel(null);
+    }
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  useEffect(() => {
+    if (settings.bgMode !== 'wallpaper') {
+      setWallpaperUrl(undefined);
+      return;
+    }
+    let revoked = false;
+    (async () => {
+      const manifest = await storage.getWallpapers();
+      const active = manifest.wallpapers.filter(w => manifest.activeIds.includes(w.id));
+      if (!active.length) return;
+      const pick = active[Math.floor(Math.random() * active.length)];
+      const blob = await storage.getWallpaperBlob(pick.id);
+      if (blob && !revoked) {
+        const url = URL.createObjectURL(blob);
+        setWallpaperUrl(url);
+      }
+    })();
+    return () => { revoked = true; };
+  }, [settings.bgMode]);
+
   const handleDirty = useCallback(async () => {
     const updated = await storage.getSettings();
     setSettings(updated);
@@ -43,6 +72,15 @@ function NewTab() {
   const togglePanel = (panel: PanelId) => {
     setActivePanel(prev => prev === panel ? null : panel);
   };
+
+  const handleSignIn = useCallback(async () => {
+    await extensionAuthProvider.signIn();
+    await pullAll();
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await extensionAuthProvider.signOut();
+  }, []);
 
   if (!ready) return null;
 
@@ -54,6 +92,8 @@ function NewTab() {
           <SettingsPanel
             open={activePanel === 'settings'}
             onClose={() => setActivePanel(null)}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
           />
           <NotesPanel
             open={activePanel === 'notes'}
@@ -72,14 +112,21 @@ function NewTab() {
           intensity={settings.intensity}
         />
       ) : undefined}
+      wallpaperUrl={wallpaperUrl}
       showGrain={settings.showGrain}
     >
-      {settings.showClock && <Clock />}
+      {settings.showClock && (
+        <Clock
+          greetingName={settings.greetingName}
+          greetingCustom={settings.greetingCustom}
+          greetingCustomText={settings.greetingCustomText}
+        />
+      )}
       <FocusLine focusLines={settings.focusLines} focusText={settings.focusText} />
       <SearchBar searchEngine={settings.searchEngine} />
       <QuickLinks onDirty={handleDirty} />
+      <BibleVerse showQuote={settings.showQuote} />
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8 }}>
-        <BibleVerse showQuote={settings.showQuote} />
         <Weather
           postalCode={settings.postalCode}
           weatherUnit={settings.weatherUnit}
