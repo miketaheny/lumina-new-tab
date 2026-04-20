@@ -42,6 +42,92 @@ Confirmed Asana's html_notes allowlist has no checkbox markup (kept existing tas
 
 ## Chores
 
+- [x] CHORE: wallpapers need to be able to be removed, also not showing up on main panel
+
+```RESULT:
+Resolved wallpaper blobs from IndexedDB into object URLs and passed to LuminaShell in both web and extension apps. Added blob cleanup on wallpaper delete. Allowed all wallpaper types (not just drive) to be removed from the grid — commit: d81af09 2026.04.17 13:32:57
+```
+- [x] CHORE: Fix Import Bookmarks feature so that it imports sub folders from the root selected.  allow for lumina bookmarks to be  moved to different folders
+
+```RESULT:
+Rebuilt Chrome bookmark import to recursively convert subtrees preserving folder structure. Added move-to-folder action on bookmarks and folders with a folder picker modal — commit: c7fb276 2026.04.17 13:37:42
+```
+- [x] CHORE: Quick Links mirrored in Bookmarks tab — show quick links as a pinned section inside the bookmarks panel above the tree
+
+```RESULT:
+Added collapsible Quick Links section above the bookmarks tree in the Bookmarks tab, loaded from storage and filtered by the search query — commit: 16c1f2f 2026.04.17 13:41:26
+```
+- [x] CHORE: Export bookmarks/links — export to Markdown, Apple Notes format, and plain text via copy-to-clipboard
+
+```RESULT:
+Added Export button with format picker (Markdown, Apple Notes, Plain Text) that formats quick links and bookmarks tree then copies to clipboard — commit: 98c9784 2026.04.17 15:14:56
+```
+- [x] CHORE: Notes — Copy as Markdown toolbar button
+
+```RESULT:
+Added Copy as Markdown button to the notes toolbar that copies note content via TipTap markdown storage — commit: 2ed9b9b 2026.04.17 15:15:55
+```
+- [x] CHORE: Notes — Copy to Apple Notes toolbar button (formats for Apple Notes paste)
+
+```RESULT:
+Added Copy for Apple Notes button that copies HTML via ClipboardItem API for rich paste in Apple Notes — commit: 52d389b 2026.04.17 15:16:35
+```
+- [x] CHORE: Notes — Clear Completed toolbar button that strips completed checklist items
+
+```RESULT:
+Added Clear Completed button that walks ProseMirror doc and deletes checked taskItem nodes — commit: 66cf091 2026.04.17 15:17:11
+```
+- [x] CHORE: Search engine dropdown ��� inline dropdown in search bar to switch engines (Google, DuckDuckGo, Bing, etc.) without going to settings
+
+```RESULT:
+Added engine picker button to search bar with dropdown to switch engines; persists to settings — commit: 9b50ee8 2026.04.17 15:18:16
+```
+- [x] CHORE: Keyboard shortcut — `/` to focus search bar
+
+```RESULT:
+Added global keydown listener that focuses search input on / press (skipped when in input/textarea/contenteditable) — commit: 47d3703 2026.04.17 15:18:51
+```
+- [x] CHORE: Keyboard shortcut — Escape to close open panels
+
+```RESULT:
+Added global Escape keydown listener in both web and extension entry points to close active panel — commit: 616b6bd 2026.04.17 15:19:33
+```
+- [x] CHORE: Panel theme — support light/dark/system theme per-panel
+
+```RESULT:
+Added 'system' option to panelTheme setting with matchMedia listener. Both panels resolve to dark/light tokens for bg, borders, and text — commit: ec164aa 2026.04.17 15:39:32
+```
+- [x] CHORE: Greeting customization — allow custom greeting text option beyond focus lines
+
+```RESULT:
+Wired greeting props (name, custom toggle, custom text) to Clock component in both entry points. Added custom greeting toggle and text input in General settings — commit: 0d183f6 2026.04.17 15:41:08
+```
+- [x] CHORE: Daily focus line editing — inline edit for focus text directly in settings panel
+
+```RESULT:
+Added Focus Line section to GeneralSettings with override text input and rotating lines textarea — commit: cc0de22 2026.04.17 15:42:00
+```
+- [x] CHORE: Content scripts — remove them completely.  if service can't accept parameter query for search copy search to clipboard and let user know to paste into new window
+
+```RESULT:
+Removed all 3 content scripts (chatgpt, claude-ai, gemini). AI engines now copy query to clipboard and show toast instead — commit: 52195fa 2026.04.20 00:00:00
+```
+- [x] CHORE: Popup — browser action popup for saving current tab URL to Kindling (extension only)
+
+```RESULT:
+Built popup with current tab info, duplicate check, and Save to Kindling button with Drive sync — commit: 032aee2 2026.04.20 00:05:00
+```
+- [x] CHORE: Background service worker — context menus ("Save to Kindling", "Add to Quick Links") (extension only)
+
+```RESULT:
+Added "Save to Kindling" and "Add to Quick Links" context menus to background service worker with duplicate detection and Drive sync — commit: ffb5379 2026.04.20 00:10:00
+```
+- [x] CHORE: Auto-fill system — form auto-fill with address book (multiple profiles), context menu trigger, field detection and mapping, settings UI for managing saved addresses
+
+```RESULT:
+Consolidated address types, added full CRUD address book UI as Autofill tab in settings, syncs entries to chrome.storage.local for background context menus — commit: 3b6dd78 2026.04.20 00:20:00
+```
+
 - [x] CHORE: update readme and user guide as needed based on changes
 
 ```RESULT:
