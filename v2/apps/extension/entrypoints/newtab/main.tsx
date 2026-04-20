@@ -21,6 +21,7 @@ function NewTab() {
   const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling'>('notes');
   const [ready, setReady] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
 
   useEffect(() => {
     storage.getSettings().then((s) => {
@@ -34,6 +35,34 @@ function NewTab() {
       cleanupStatus();
     };
   }, []);
+
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setActivePanel(null);
+    }
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  useEffect(() => {
+    if (settings.bgMode !== 'wallpaper') {
+      setWallpaperUrl(undefined);
+      return;
+    }
+    let revoked = false;
+    (async () => {
+      const manifest = await storage.getWallpapers();
+      const active = manifest.wallpapers.filter(w => manifest.activeIds.includes(w.id));
+      if (!active.length) return;
+      const pick = active[Math.floor(Math.random() * active.length)];
+      const blob = await storage.getWallpaperBlob(pick.id);
+      if (blob && !revoked) {
+        const url = URL.createObjectURL(blob);
+        setWallpaperUrl(url);
+      }
+    })();
+    return () => { revoked = true; };
+  }, [settings.bgMode]);
 
   const handleDirty = useCallback(async () => {
     const updated = await storage.getSettings();
@@ -83,9 +112,16 @@ function NewTab() {
           intensity={settings.intensity}
         />
       ) : undefined}
+      wallpaperUrl={wallpaperUrl}
       showGrain={settings.showGrain}
     >
-      {settings.showClock && <Clock />}
+      {settings.showClock && (
+        <Clock
+          greetingName={settings.greetingName}
+          greetingCustom={settings.greetingCustom}
+          greetingCustomText={settings.greetingCustomText}
+        />
+      )}
       <FocusLine focusLines={settings.focusLines} focusText={settings.focusText} />
       <SearchBar searchEngine={settings.searchEngine} />
       <QuickLinks onDirty={handleDirty} />

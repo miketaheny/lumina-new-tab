@@ -175,6 +175,46 @@ export function NoteEditor({ content, onChange, onSave }: NoteEditorProps) {
         >
           <CodeBlockSvg />
         </ToolBtn>
+        <Divider />
+        <ToolBtn
+          title="Copy as Markdown"
+          onClick={() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const md = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getHTML();
+            navigator.clipboard.writeText(md);
+          }}
+        >
+          <CopyMdSvg />
+        </ToolBtn>
+        <ToolBtn
+          title="Clear completed tasks"
+          onClick={() => {
+            const { state, dispatch } = editor.view;
+            const { tr } = state;
+            const toDelete: Array<{ from: number; to: number }> = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name === 'taskItem' && node.attrs.checked) {
+                toDelete.push({ from: pos, to: pos + node.nodeSize });
+              }
+            });
+            for (let i = toDelete.length - 1; i >= 0; i--) {
+              tr.delete(toDelete[i].from, toDelete[i].to);
+            }
+            if (toDelete.length) dispatch(tr);
+          }}
+        >
+          <ClearDoneSvg />
+        </ToolBtn>
+        <ToolBtn
+          title="Copy for Apple Notes"
+          onClick={() => {
+            const html = editor.getHTML();
+            const blob = new Blob([html], { type: 'text/html' });
+            navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          }}
+        >
+          <AppleNotesSvg />
+        </ToolBtn>
       </div>
       <EditorContent editor={editor} style={editorContentStyle} />
       <style>{editorCss}</style>
@@ -266,6 +306,29 @@ function CodeBlockSvg() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="18" rx="3"/>
       <polyline points="8 10 4 14 8 18"/><polyline points="16 10 20 14 16 18"/>
+    </svg>
+  );
+}
+
+function ClearDoneSvg() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      <line x1="4" y1="22" x2="22" y2="4" strokeWidth="1.5" stroke="currentColor" opacity="0.5"/>
+    </svg>
+  );
+}
+function AppleNotesSvg() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
+    </svg>
+  );
+}
+function CopyMdSvg() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
     </svg>
   );
 }

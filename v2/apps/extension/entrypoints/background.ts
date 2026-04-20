@@ -1,9 +1,28 @@
+import { storage } from '@lumina/core';
+import { setAuthProvider, markDirty, schedulePush } from '@lumina/drive';
+import type { KindlingItem, QuickLink } from '@lumina/core';
+import { extensionAuthProvider } from '../lib/extension-auth-provider';
+
+setAuthProvider(extensionAuthProvider);
+
 export default defineBackground(() => {
   const STORAGE_KEY = 'lumina_address_book';
   const MENU_PARENT = 'lumina-autofill-parent';
 
   function buildContextMenu(entries: any[]) {
     chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: 'lumina-save-kindling',
+        title: 'Lumina: Save to Kindling',
+        contexts: ['page'],
+      });
+
+      chrome.contextMenus.create({
+        id: 'lumina-add-quicklink',
+        title: 'Lumina: Add to Quick Links',
+        contexts: ['page'],
+      });
+
       chrome.contextMenus.create({
         id: MENU_PARENT,
         title: 'Lumina: Auto-fill form with',
@@ -48,14 +67,61 @@ export default defineBackground(() => {
 
   refreshContextMenu();
 
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (!info.menuItemId || info.menuItemId === MENU_PARENT) return;
-    if (info.menuItemId === 'lumina-autofill-empty') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('/newtab.html') });
+  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (!info.menuItemId) return;
+
+    if (info.menuItemId === 'lumina-save-kindling') {
+      const url = info.pageUrl || tab?.url;
+      const title = tab?.title || url || '';
+      if (!url) return;
+      const data = await storage.getKindling();
+      if (data.items.some(i => i.url === url)) return;
+      const now = new Date().toISOString();
+      const item: KindlingItem = {
+        id: `k-${Date.now()}`,
+        url,
+        title,
+        tags: [],
+        readAt: null,
+        sortOrder: data.items.length,
+        updatedAt: now,
+      };
+      await storage.setKindling({ ...data, items: [...data.items, item], updatedAt: now });
+      await markDirty('kindling');
+      schedulePush();
       return;
     }
+
+    if (info.menuItemId === 'lumina-add-quicklink') {
+      const url = info.pageUrl || tab?.url;
+      const title = tab?.title || url || '';
+      if (!url) return;
+      const qlData = await storage.getQuickLinks();
+      if (qlData.links.some(l => l.url === url)) return;
+      let hostname = '';
+      try { hostname = new URL(url).hostname; } catch { /* ignore */ }
+      const link: QuickLink = {
+        id: `ql-${Date.now()}`,
+        url,
+        label: title,
+        favicon: hostname ? `https://www.google.com/s2/favicons?domain=${hostname}&sz=32` : null,
+        section: 'default',
+      };
+      await storage.setQuickLinks({ ...qlData, links: [...qlData.links, link] });
+      await markDirty('quickLinks');
+      schedulePush();
+      return;
+    }
+
+    if (info.menuItemId === MENU_PARENT || info.menuItemId === 'lumina-autofill-empty') {
+      if (info.menuItemId === 'lumina-autofill-empty') {
+        chrome.tabs.create({ url: chrome.runtime.getURL('/newtab.html') });
+      }
+      return;
+    }
+
     const entryId = String(info.menuItemId).replace(/^lumina-ab-/, '');
-    if (!entryId) return;
+    if (!entryId || !tab?.id) return;
     chrome.storage.local.get(STORAGE_KEY, (data: Record<string, any>) => {
       const entries = data[STORAGE_KEY];
       const entry = Array.isArray(entries)

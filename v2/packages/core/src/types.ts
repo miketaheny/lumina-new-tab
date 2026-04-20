@@ -100,13 +100,13 @@ export interface LuminaSettings {
   greetingName: string;
   greetingCustom: boolean;
   greetingCustomText: string;
-  panelTheme: 'dark' | 'light';
+  panelTheme: 'dark' | 'light' | 'system';
   notesPanelOpen: boolean;
   qlIconsOnly: boolean;
   qlCollapsed: Record<string, boolean>;
   activeNoteId: string | null;
   savedFaviconBg: 'white' | 'dark' | 'transparent';
-  addressBook: AddressEntry[];
+  addressBook: AddressBookEntry[];
   updatedAt: string;
 }
 
@@ -133,19 +133,6 @@ export interface AddressBookEntry {
   state?: string;
   zip?: string;
   country?: string;
-}
-
-export interface AddressEntry {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address1: string;
-  address2: string;
-  city: string;
-  state: string;
-  zip: string;
-  country: string;
 }
 
 // ─── Sync Metadata ──────────────────────────

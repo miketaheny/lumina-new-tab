@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { storage } from '@lumina/core';
 import { markDirty, schedulePush } from '@lumina/drive';
 import type { LuminaSettings, WallpapersManifest } from '@lumina/core';
@@ -6,8 +6,9 @@ import { ThemeGrid } from './settings/ThemeGrid';
 import { WallpaperGrid } from './settings/WallpaperGrid';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { SyncSettings } from './settings/SyncSettings';
+import { AddressBookSettings } from './settings/AddressBookSettings';
 
-type Tab = 'themes' | 'wallpapers' | 'general' | 'sync';
+type Tab = 'themes' | 'wallpapers' | 'general' | 'autofill' | 'sync';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -43,6 +44,19 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
     schedulePush();
   }, []);
 
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const isDark = settings?.panelTheme === 'system' ? systemDark : (settings?.panelTheme ?? 'dark') === 'dark';
+  const t = useMemo(() => isDark ? DARK_TOKENS : LIGHT_TOKENS, [isDark]);
+
   function handleBackdropClick(e: React.MouseEvent) {
     if (e.target === e.currentTarget) onClose();
   }
@@ -57,24 +71,26 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
       )}
       <div style={{
         ...panelStyle,
+        background: t.panelBg,
+        borderLeft: `1px solid ${t.border}`,
         transform: open ? 'translateX(0)' : 'translateX(100%)',
       }}>
-        <div style={panelHeaderStyle}>
-          <span style={panelTitleStyle}>Settings</span>
-          <button style={closeBtnStyle} onClick={onClose} title="Close">
+        <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
+          <span style={{ ...panelTitleStyle, color: t.textStrong }}>Settings</span>
+          <button style={{ ...closeBtnStyle, color: t.textMuted, borderColor: t.border }} onClick={onClose} title="Close">
             <CloseSvg />
           </button>
         </div>
 
-        <div style={tabBarStyle}>
+        <div style={{ ...tabBarStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
           {TABS.map(tab => (
             <button
               key={tab.id}
               style={{
                 ...tabBtnStyle,
-                background: activeTab === tab.id ? 'rgba(167,139,250,0.15)' : 'transparent',
-                borderBottom: activeTab === tab.id ? '2px solid rgba(167,139,250,0.7)' : '2px solid transparent',
-                color: activeTab === tab.id ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
+                background: activeTab === tab.id ? t.accentBg : 'transparent',
+                borderBottom: activeTab === tab.id ? `2px solid ${t.accent}` : '2px solid transparent',
+                color: activeTab === tab.id ? t.accentText : t.textMuted,
               }}
               onClick={() => setActiveTab(tab.id)}
             >
@@ -133,6 +149,14 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
             </section>
           )}
 
+          {activeTab === 'autofill' && (
+            <section>
+              <SectionTitle>Auto-fill Forms</SectionTitle>
+              <p style={sectionDescStyle}>Manage address profiles for one-click form filling via context menu.</p>
+              <AddressBookSettings />
+            </section>
+          )}
+
           {activeTab === 'sync' && (
             <section>
               <SectionTitle>Sync</SectionTitle>
@@ -153,6 +177,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'themes', label: 'Themes' },
   { id: 'wallpapers', label: 'Wallpapers' },
   { id: 'general', label: 'General' },
+  { id: 'autofill', label: 'Autofill' },
   { id: 'sync', label: 'Sync' },
 ];
 
@@ -265,6 +290,39 @@ const segBtnStyle: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
   transition: 'all 0.15s',
   textAlign: 'center',
+};
+
+interface ThemeTokens {
+  panelBg: string;
+  border: string;
+  borderSubtle: string;
+  textStrong: string;
+  textMuted: string;
+  accent: string;
+  accentBg: string;
+  accentText: string;
+}
+
+const DARK_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(14,10,28,0.97)',
+  border: 'rgba(255,255,255,0.1)',
+  borderSubtle: 'rgba(255,255,255,0.07)',
+  textStrong: 'rgba(255,255,255,0.85)',
+  textMuted: 'rgba(255,255,255,0.5)',
+  accent: 'rgba(167,139,250,0.7)',
+  accentBg: 'rgba(167,139,250,0.15)',
+  accentText: '#c4b5fd',
+};
+
+const LIGHT_TOKENS: ThemeTokens = {
+  panelBg: 'rgba(250,248,255,0.98)',
+  border: 'rgba(0,0,0,0.1)',
+  borderSubtle: 'rgba(0,0,0,0.06)',
+  textStrong: 'rgba(15,10,30,0.9)',
+  textMuted: 'rgba(15,10,30,0.5)',
+  accent: 'rgba(109,72,220,0.7)',
+  accentBg: 'rgba(109,72,220,0.1)',
+  accentText: '#6d48dc',
 };
 
 function CloseSvg() {

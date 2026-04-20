@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
+import type { BookmarkNode } from '@lumina/core';
 
-// chrome is only available in the extension context; declared here so the shared
-// package compiles without @types/chrome. The isBookmarksAvailable() guard
-// ensures the component renders null in web contexts.
 declare const chrome: {
   bookmarks: {
     getTree: (callback: (results: ChromeBookmarkTreeNode[]) => void) => void;
@@ -17,13 +15,8 @@ interface ChromeBookmarkTreeNode {
   children?: ChromeBookmarkTreeNode[];
 }
 
-interface ImportLink {
-  url: string;
-  label: string;
-}
-
 interface BookmarkSyncModalProps {
-  onImport: (links: ImportLink[]) => void;
+  onImport: (nodes: BookmarkNode[]) => void;
   onClose: () => void;
 }
 
@@ -44,19 +37,6 @@ function collectFolders(nodes: ChromeBookmarkTreeNode[], depth = 0): Array<{ nod
   return result;
 }
 
-function getDirectBookmarks(nodes: ChromeBookmarkTreeNode[], folderId: string): ChromeBookmarkTreeNode[] {
-  for (const node of nodes) {
-    if (node.id === folderId) {
-      return (node.children ?? []).filter(c => !!c.url);
-    }
-    if (node.children) {
-      const found = getDirectBookmarks(node.children, folderId);
-      if (found.length > 0 || node.id === folderId) return found;
-    }
-  }
-  return [];
-}
-
 function findFolder(nodes: ChromeBookmarkTreeNode[], folderId: string): ChromeBookmarkTreeNode | null {
   for (const node of nodes) {
     if (node.id === folderId) return node;
@@ -68,11 +48,32 @@ function findFolder(nodes: ChromeBookmarkTreeNode[], folderId: string): ChromeBo
   return null;
 }
 
+let _importCounter = 0;
+function chromeToBookmarkNodes(children: ChromeBookmarkTreeNode[], parentId: string | null): BookmarkNode[] {
+  return children.map((c, i) => {
+    const id = `bm-import-${Date.now()}-${_importCounter++}`;
+    if (c.url) {
+      return { id, parentId, type: 'bookmark' as const, title: c.title || c.url, url: c.url, sortOrder: i };
+    }
+    const kids = c.children ? chromeToBookmarkNodes(c.children, id) : [];
+    return { id, parentId, type: 'folder' as const, title: c.title || 'Untitled Folder', children: kids, sortOrder: i };
+  });
+}
+
+function countNodes(nodes: BookmarkNode[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    count++;
+    if (n.children) count += countNodes(n.children);
+  }
+  return count;
+}
+
 export function BookmarkSyncModal({ onImport, onClose }: BookmarkSyncModalProps) {
   const [tree, setTree] = useState<ChromeBookmarkTreeNode[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [step, setStep] = useState<'select' | 'preview'>('select');
-  const [previewLinks, setPreviewLinks] = useState<ImportLink[]>([]);
+  const [previewNodes, setPreviewNodes] = useState<BookmarkNode[]>([]);
 
   if (!isBookmarksAvailable()) return null;
 
@@ -92,13 +93,14 @@ export function BookmarkSyncModal({ onImport, onClose }: BookmarkSyncModalProps)
     if (!selectedFolderId) return;
     const folder = findFolder(tree, selectedFolderId);
     if (!folder) return;
-    const bookmarks = getDirectBookmarks(tree, selectedFolderId);
-    setPreviewLinks(bookmarks.map(b => ({ url: b.url!, label: b.title || b.url! })));
+    _importCounter = 0;
+    const nodes = chromeToBookmarkNodes(folder.children ?? [], null);
+    setPreviewNodes(nodes);
     setStep('preview');
   }
 
   function handleImport() {
-    onImport(previewLinks);
+    onImport(previewNodes);
     onClose();
   }
 
@@ -160,33 +162,46 @@ export function BookmarkSyncModal({ onImport, onClose }: BookmarkSyncModalProps)
         {step === 'preview' && (
           <>
             <div style={bodyStyle}>
-              {previewLinks.length === 0 ? (
+              {previewNodes.length === 0 ? (
                 <p style={emptyStyle}>No bookmarks found in this folder.</p>
               ) : (
                 <div style={previewListStyle}>
-                  {previewLinks.map((link, i) => (
-                    <div key={i} style={previewItemStyle}>
-                      <span style={previewLabelStyle}>{link.label}</span>
-                      <span style={previewUrlStyle}>{link.url}</span>
-                    </div>
-                  ))}
+                  <PreviewTree nodes={previewNodes} depth={0} />
                 </div>
               )}
             </div>
             <div style={footerStyle}>
               <button style={cancelBtnStyle} onClick={() => setStep('select')}>Back</button>
               <button
-                style={{ ...primaryBtnStyle, opacity: previewLinks.length > 0 ? 1 : 0.4 }}
+                style={{ ...primaryBtnStyle, opacity: previewNodes.length > 0 ? 1 : 0.4 }}
                 onClick={handleImport}
-                disabled={previewLinks.length === 0}
+                disabled={previewNodes.length === 0}
               >
-                Import {previewLinks.length > 0 ? `${previewLinks.length} Links` : ''}
+                Import {countNodes(previewNodes)} items
               </button>
             </div>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+function PreviewTree({ nodes, depth }: { nodes: BookmarkNode[]; depth: number }) {
+  return (
+    <>
+      {nodes.map(n => (
+        <div key={n.id}>
+          <div style={{ ...previewItemStyle, paddingLeft: 10 + depth * 14 }}>
+            <span style={previewLabelStyle}>
+              {n.type === 'folder' ? '📁 ' : ''}{n.title}
+            </span>
+            {n.url && <span style={previewUrlStyle}>{n.url}</span>}
+          </div>
+          {n.children && <PreviewTree nodes={n.children} depth={depth + 1} />}
+        </div>
+      ))}
+    </>
   );
 }
 
