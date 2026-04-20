@@ -6,8 +6,9 @@ import { ThemeGrid } from './settings/ThemeGrid';
 import { WallpaperGrid } from './settings/WallpaperGrid';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { SyncSettings } from './settings/SyncSettings';
+import { AddressBookSettings } from './settings/AddressBookSettings';
 
-type Tab = 'themes' | 'wallpapers' | 'general' | 'sync';
+type Tab = 'themes' | 'wallpapers' | 'general' | 'autofill' | 'sync';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -148,6 +149,14 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
             </section>
           )}
 
+          {activeTab === 'autofill' && (
+            <section>
+              <SectionTitle>Auto-fill Forms</SectionTitle>
+              <p style={sectionDescStyle}>Manage address profiles for one-click form filling via context menu.</p>
+              <AddressBookSettings />
+            </section>
+          )}
+
           {activeTab === 'sync' && (
             <section>
               <SectionTitle>Sync</SectionTitle>
@@ -168,6 +177,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'themes', label: 'Themes' },
   { id: 'wallpapers', label: 'Wallpapers' },
   { id: 'general', label: 'General' },
+  { id: 'autofill', label: 'Autofill' },
   { id: 'sync', label: 'Sync' },
 ];
 

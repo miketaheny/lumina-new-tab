@@ -1,26 +1,40 @@
 import { useState, useEffect } from 'react';
 import { storage } from '@lumina/core';
-import type { AddressEntry, LuminaSettings } from '@lumina/core';
+import type { AddressBookEntry } from '@lumina/core';
 
 function generateId() {
   return `addr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-const EMPTY_ENTRY: Omit<AddressEntry, 'id'> = {
+const EMPTY_ENTRY: Omit<AddressBookEntry, 'id'> = {
+  label: '',
   name: '',
+  firstName: '',
+  lastName: '',
   email: '',
   phone: '',
-  address1: '',
-  address2: '',
+  company: '',
+  addressLine1: '',
+  addressLine2: '',
   city: '',
   state: '',
   zip: '',
   country: '',
 };
 
+const CHROME_STORAGE_KEY = 'lumina_address_book';
+
+function syncToChromeStorage(entries: AddressBookEntry[]) {
+  try {
+    if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
+      chrome.storage.local.set({ [CHROME_STORAGE_KEY]: entries });
+    }
+  } catch { /* web context — no chrome.storage */ }
+}
+
 export function AddressBookSettings() {
-  const [entries, setEntries] = useState<AddressEntry[]>([]);
-  const [editing, setEditing] = useState<AddressEntry | null>(null);
+  const [entries, setEntries] = useState<AddressBookEntry[]>([]);
+  const [editing, setEditing] = useState<AddressBookEntry | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
@@ -29,10 +43,11 @@ export function AddressBookSettings() {
     });
   }, []);
 
-  async function saveEntries(next: AddressEntry[]) {
+  async function saveEntries(next: AddressBookEntry[]) {
     setEntries(next);
     const s = await storage.getSettings();
     await storage.setSettings({ ...s, addressBook: next, updatedAt: new Date().toISOString() });
+    syncToChromeStorage(next);
   }
 
   function handleAdd() {
@@ -40,7 +55,7 @@ export function AddressBookSettings() {
     setShowForm(true);
   }
 
-  function handleEdit(entry: AddressEntry) {
+  function handleEdit(entry: AddressBookEntry) {
     setEditing({ ...entry });
     setShowForm(true);
   }
@@ -49,7 +64,7 @@ export function AddressBookSettings() {
     await saveEntries(entries.filter(e => e.id !== id));
   }
 
-  async function handleSave(entry: AddressEntry) {
+  async function handleSave(entry: AddressBookEntry) {
     const exists = entries.some(e => e.id === entry.id);
     const next = exists
       ? entries.map(e => e.id === entry.id ? entry : e)
@@ -78,7 +93,7 @@ export function AddressBookSettings() {
           {entries.map(entry => (
             <div key={entry.id} style={entryRowStyle}>
               <div style={entryInfoStyle}>
-                <span style={entryNameStyle}>{entry.name || 'Unnamed'}</span>
+                <span style={entryNameStyle}>{entry.label || entry.name || 'Unnamed'}</span>
                 {entry.email && <span style={entryDetailStyle}>{entry.email}</span>}
                 {(entry.city || entry.state) && (
                   <span style={entryDetailStyle}>
@@ -111,22 +126,24 @@ export function AddressBookSettings() {
 }
 
 interface AddressFormProps {
-  entry: AddressEntry;
-  onSave: (entry: AddressEntry) => void;
+  entry: AddressBookEntry;
+  onSave: (entry: AddressBookEntry) => void;
   onCancel: () => void;
 }
 
 function AddressForm({ entry, onSave, onCancel }: AddressFormProps) {
-  const [form, setForm] = useState<AddressEntry>({ ...entry });
+  const [form, setForm] = useState<AddressBookEntry>({ ...entry });
 
-  function set<K extends keyof AddressEntry>(key: K, value: AddressEntry[K]) {
+  function set<K extends keyof AddressBookEntry>(key: K, value: string) {
     setForm(f => ({ ...f, [key]: value }));
   }
 
   function handleSubmit() {
-    if (!form.name.trim()) return;
+    if (!(form.name || form.firstName || form.lastName || '').trim()) return;
     onSave(form);
   }
+
+  const hasName = !!(form.name || form.firstName || form.lastName || '').trim();
 
   return (
     <div style={overlayStyle} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -136,44 +153,60 @@ function AddressForm({ entry, onSave, onCancel }: AddressFormProps) {
           <button style={iconBtnStyle} onClick={onCancel} title="Close"><CloseSvg /></button>
         </div>
         <div style={formBodyStyle}>
-          <Field label="Name *">
-            <input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Full name" />
+          <Field label="Label">
+            <input style={inputStyle} value={form.label ?? ''} onChange={e => set('label', e.target.value)} placeholder="e.g. Home, Work" />
+          </Field>
+          <div style={twoColStyle}>
+            <Field label="First Name">
+              <input style={inputStyle} value={form.firstName ?? ''} onChange={e => set('firstName', e.target.value)} placeholder="First" />
+            </Field>
+            <Field label="Last Name">
+              <input style={inputStyle} value={form.lastName ?? ''} onChange={e => set('lastName', e.target.value)} placeholder="Last" />
+            </Field>
+          </div>
+          <Field label="Full Name">
+            <input style={inputStyle} value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder="Full name (auto-derived if blank)" />
           </Field>
           <Field label="Email">
-            <input style={inputStyle} value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@example.com" type="email" />
+            <input style={inputStyle} value={form.email ?? ''} onChange={e => set('email', e.target.value)} placeholder="email@example.com" type="email" />
           </Field>
-          <Field label="Phone">
-            <input style={inputStyle} value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+1 (555) 000-0000" type="tel" />
-          </Field>
+          <div style={twoColStyle}>
+            <Field label="Phone">
+              <input style={inputStyle} value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="+1 (555) 000-0000" type="tel" />
+            </Field>
+            <Field label="Company">
+              <input style={inputStyle} value={form.company ?? ''} onChange={e => set('company', e.target.value)} placeholder="Company" />
+            </Field>
+          </div>
           <Field label="Address Line 1">
-            <input style={inputStyle} value={form.address1} onChange={e => set('address1', e.target.value)} placeholder="123 Main St" />
+            <input style={inputStyle} value={form.addressLine1 ?? ''} onChange={e => set('addressLine1', e.target.value)} placeholder="123 Main St" />
           </Field>
           <Field label="Address Line 2">
-            <input style={inputStyle} value={form.address2} onChange={e => set('address2', e.target.value)} placeholder="Apt, Suite, etc." />
+            <input style={inputStyle} value={form.addressLine2 ?? ''} onChange={e => set('addressLine2', e.target.value)} placeholder="Apt, Suite, etc." />
           </Field>
           <div style={twoColStyle}>
             <Field label="City">
-              <input style={inputStyle} value={form.city} onChange={e => set('city', e.target.value)} placeholder="City" />
+              <input style={inputStyle} value={form.city ?? ''} onChange={e => set('city', e.target.value)} placeholder="City" />
             </Field>
             <Field label="State">
-              <input style={inputStyle} value={form.state} onChange={e => set('state', e.target.value)} placeholder="State" />
+              <input style={inputStyle} value={form.state ?? ''} onChange={e => set('state', e.target.value)} placeholder="State" />
             </Field>
           </div>
           <div style={twoColStyle}>
             <Field label="ZIP">
-              <input style={inputStyle} value={form.zip} onChange={e => set('zip', e.target.value)} placeholder="ZIP code" />
+              <input style={inputStyle} value={form.zip ?? ''} onChange={e => set('zip', e.target.value)} placeholder="ZIP code" />
             </Field>
             <Field label="Country">
-              <input style={inputStyle} value={form.country} onChange={e => set('country', e.target.value)} placeholder="Country" />
+              <input style={inputStyle} value={form.country ?? ''} onChange={e => set('country', e.target.value)} placeholder="US, CA, GB…" />
             </Field>
           </div>
         </div>
         <div style={formFooterStyle}>
           <button style={cancelBtnStyle} onClick={onCancel}>Cancel</button>
           <button
-            style={{ ...saveBtnStyle, opacity: form.name.trim() ? 1 : 0.4 }}
+            style={{ ...saveBtnStyle, opacity: hasName ? 1 : 0.4 }}
             onClick={handleSubmit}
-            disabled={!form.name.trim()}
+            disabled={!hasName}
           >
             Save
           </button>
