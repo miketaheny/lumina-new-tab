@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { storage, SEARCH_URLS } from '@lumina/core';
+import { storage, SEARCH_URLS, CLIPBOARD_ENGINES } from '@lumina/core';
+import { showToast } from './Toast';
 
 const ENGINE_LABELS: Record<string, string> = {
   claude: 'Claude',
@@ -55,7 +56,13 @@ export function SearchBar({ searchEngine = 'claude' }: SearchBarProps) {
     const q = query.trim();
     if (!q) return;
     const base = SEARCH_URLS[engine] ?? SEARCH_URLS.claude;
-    window.open(base + encodeURIComponent(q), '_blank');
+    if (CLIPBOARD_ENGINES.has(engine)) {
+      navigator.clipboard.writeText(q);
+      showToast('Query copied — paste into the chat input');
+      window.open(base, '_blank');
+    } else {
+      window.open(base + encodeURIComponent(q), '_blank');
+    }
     setQuery('');
   }
 
