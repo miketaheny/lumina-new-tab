@@ -20,6 +20,7 @@ export { BibleVerse } from './components/BibleVerse';
 export { NotesPanel } from './components/NotesPanel';
 export { BookmarksTree } from './components/BookmarksTree';
 export { KindlingPanel } from './components/KindlingPanel';
+export { SnippetsPanel } from './components/SnippetsPanel';
 export { Toast, showToast } from './components/Toast';
 export { BookmarkSyncModal } from './components/BookmarkSyncModal';
 export { SetupWizard } from './components/SetupWizard';
