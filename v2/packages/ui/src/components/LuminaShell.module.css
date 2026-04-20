@@ -51,11 +51,15 @@
 
 .appPanelOpen {
   margin-right: clamp(420px, 40vw, 800px);
+  margin-left: 0;
+  max-width: calc(100vw - clamp(420px, 40vw, 800px) - 64px);
 }
 
 @media (max-width: 768px) {
   .appPanelOpen {
     margin-right: auto;
+    margin-left: auto;
+    max-width: 900px;
   }
 }
 
