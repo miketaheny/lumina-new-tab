@@ -91,7 +91,10 @@ function NewTab() {
         <>
           <SettingsPanel
             open={activePanel === 'settings'}
-            onClose={() => setActivePanel(null)}
+            onClose={() => {
+              setActivePanel(null);
+              storage.getSettings().then(setSettings);
+            }}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
           />
