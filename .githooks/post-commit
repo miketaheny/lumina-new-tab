@@ -6,12 +6,12 @@
 
 set -euo pipefail
 
-if ! git diff-tree --no-commit-id --name-only -r HEAD | grep -qx 'manifest.json'; then
+if ! git diff-tree --no-commit-id --name-only -r HEAD | grep -qx 'v1/manifest.json'; then
   exit 0
 fi
 
-NEW=$(git show "HEAD:manifest.json" | jq -r .version 2>/dev/null || echo "")
-OLD=$(git show "HEAD^:manifest.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")
+NEW=$(git show "HEAD:v1/manifest.json" | jq -r .version 2>/dev/null || echo "")
+OLD=$(git show "HEAD^:v1/manifest.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")
 
 if [ -z "$NEW" ] || [ "$NEW" = "$OLD" ]; then
   exit 0
@@ -27,9 +27,11 @@ if ! command -v node >/dev/null 2>&1; then
   exit 0
 fi
 
+cd v1
+
 if [ ! -f tiptap-bundle.js ] || [ src/tiptap-bundle.js -nt tiptap-bundle.js ]; then
   echo "[post-commit] rebuilding tiptap bundle"
   npm run build --silent
 fi
 
-bash bin/build-zip.sh "$OUT_DIR"
+bash bin/build-zip.sh "../$OUT_DIR"
