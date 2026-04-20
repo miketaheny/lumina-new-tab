@@ -2,6 +2,13 @@
 
 ## Features
 
+- [x] FEAT: make a code snippets section like notes that supports saving / editing code snippets for running in terminal, javascript, python, etc. should support basic linting and formatting, copy / paste, and basic crud
+
+```RESULT:
+Added Snippets tab to side panel with monospace code editor supporting 15 languages, tab indentation, copy to clipboard, JSON formatting, auto-save, and full CRUD. Data persisted to IndexedDB via SnippetsData — commit: 97d04e0 2026.04.20 10:01:23
+PR: https://github.com/miketaheny/lumina-new-tab/pull/13
+```
+
 - [x] FEAT: in side-panel Bookmarks tab, add controls to create, rename, and remove chrome bookmark folders (replacing the old main-panel section add/rename/remove controls)
 
 ```RESULT:
