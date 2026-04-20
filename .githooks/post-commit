@@ -1,35 +1,63 @@
 #!/usr/bin/env bash
-# Post-commit hook: if manifest.json version changed in this commit, build the
-# extension zip into releases/<branch>/.
+# Post-commit hook: builds extension zips when version changes are detected.
+# - v1: triggers on v1/manifest.json version change
+# - v2: triggers on v2/apps/extension/package.json version change
 #
 # Enable once per clone: git config core.hooksPath .githooks
 
 set -euo pipefail
 
-if ! git diff-tree --no-commit-id --name-only -r HEAD | grep -qx 'manifest.json'; then
-  exit 0
-fi
-
-NEW=$(git show "HEAD:manifest.json" | jq -r .version 2>/dev/null || echo "")
-OLD=$(git show "HEAD^:manifest.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")
-
-if [ -z "$NEW" ] || [ "$NEW" = "$OLD" ]; then
-  exit 0
-fi
-
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-OUT_DIR="releases/$BRANCH"
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
 
-echo "[post-commit] manifest version $OLD -> $NEW, building zip into $OUT_DIR"
+# ─── v1 Extension ───────────────────────────────────────────────────────────────
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "[post-commit] node not found on PATH; skipping zip build" >&2
-  exit 0
+if echo "$CHANGED_FILES" | grep -qx 'v1/manifest.json'; then
+  NEW=$(git show "HEAD:v1/manifest.json" | jq -r .version 2>/dev/null || echo "")
+  OLD=$(git show "HEAD^:v1/manifest.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")
+
+  if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; then
+    OUT_DIR="releases/$BRANCH/v1"
+    echo "[post-commit] v1 manifest version $OLD -> $NEW, building zip into $OUT_DIR"
+
+    if command -v node >/dev/null 2>&1; then
+      (
+        cd v1
+        if [ ! -f tiptap-bundle.js ] || [ src/tiptap-bundle.js -nt tiptap-bundle.js ]; then
+          echo "[post-commit] rebuilding tiptap bundle"
+          npm run build --silent
+        fi
+        bash bin/build-zip.sh "../$OUT_DIR"
+      )
+    else
+      echo "[post-commit] node not found on PATH; skipping v1 zip build" >&2
+    fi
+  fi
 fi
 
-if [ ! -f tiptap-bundle.js ] || [ src/tiptap-bundle.js -nt tiptap-bundle.js ]; then
-  echo "[post-commit] rebuilding tiptap bundle"
-  npm run build --silent
-fi
+# ─── v2 Extension ───────────────────────────────────────────────────────────────
 
-bash bin/build-zip.sh "$OUT_DIR"
+if echo "$CHANGED_FILES" | grep -qx 'v2/apps/extension/package.json'; then
+  NEW=$(git show "HEAD:v2/apps/extension/package.json" | jq -r .version 2>/dev/null || echo "")
+  OLD=$(git show "HEAD^:v2/apps/extension/package.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")
+
+  if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; then
+    OUT_DIR="releases/$BRANCH/v2"
+    echo "[post-commit] v2 extension version $OLD -> $NEW, building zip into $OUT_DIR"
+
+    if command -v node >/dev/null 2>&1; then
+      (
+        cd v2/apps/extension
+        echo "[post-commit] running wxt build..."
+        npx wxt build 2>&1 | tail -5
+        mkdir -p "../../../$OUT_DIR"
+        ZIP_PATH="../../../$OUT_DIR/lumina-new-tab-v2-${NEW}.zip"
+        rm -f "$ZIP_PATH"
+        ( cd .output/chrome-mv3 && zip -r "$OLDPWD/$ZIP_PATH" . >/dev/null )
+        echo "[post-commit] Built $ZIP_PATH"
+      )
+    else
+      echo "[post-commit] node not found on PATH; skipping v2 zip build" >&2
+    fi
+  fi
+fi
