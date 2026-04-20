@@ -1,5 +1,5 @@
 // v2/packages/core/src/defaults.ts
-import type { LuminaSettings, QuickLinksData, KindlingData, BookmarksData, WallpapersManifest, SyncMeta } from './types';
+import type { LuminaSettings, QuickLinksData, KindlingData, BookmarksData, WallpapersManifest, SyncMeta, SnippetsData } from './types';
 
 export const DEFAULT_SETTINGS: LuminaSettings = {
   themes: ['cosmic'],
@@ -47,6 +47,11 @@ export const DEFAULT_KINDLING: KindlingData = {
 
 export const DEFAULT_BOOKMARKS: BookmarksData = {
   roots: [],
+  updatedAt: new Date().toISOString(),
+};
+
+export const DEFAULT_SNIPPETS: SnippetsData = {
+  snippets: [],
   updatedAt: new Date().toISOString(),
 };
 

@@ -8,7 +8,7 @@ import {
   LuminaShell, BackgroundCanvas, Clock, SearchBar,
   QuickLinks, FocusLine, Weather, BibleVerse,
   SettingsPanel, NotesPanel, BookmarksTree, KindlingPanel,
-  Toast, SetupWizard,
+  SnippetsPanel, Toast, SetupWizard,
 } from '@lumina/ui';
 import { LuminaProviders } from './providers';
 
@@ -17,7 +17,7 @@ type PanelId = 'settings' | 'notes' | null;
 function LuminaApp() {
   const [settings, setSettings] = useState<LuminaSettings>(DEFAULT_SETTINGS);
   const [activePanel, setActivePanel] = useState<PanelId>(null);
-  const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling'>('notes');
+  const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling' | 'snippets'>('notes');
   const [showWizard, setShowWizard] = useState(false);
   const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
   const [wallpaperKey, setWallpaperKey] = useState(0);
@@ -98,6 +98,7 @@ function LuminaApp() {
             onTabChange={setNotesTab}
             bookmarksSlot={<BookmarksTree />}
             kindlingSlot={<KindlingPanel />}
+            snippetsSlot={<SnippetsPanel />}
           />
         </>
       }
