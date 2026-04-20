@@ -49,6 +49,21 @@ export interface KindlingData {
   updatedAt: string;
 }
 
+// ─── Code Snippets ─────────────────────────
+export interface CodeSnippet {
+  id: string;
+  title: string;
+  code: string;
+  language: string;
+  sortOrder: number;
+  updatedAt: string;
+}
+
+export interface SnippetsData {
+  snippets: CodeSnippet[];
+  updatedAt: string;
+}
+
 // ─── Bookmarks ──────────────────────────────
 export interface BookmarkNode {
   id: string;
