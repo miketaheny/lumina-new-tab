@@ -20,6 +20,7 @@ function LuminaApp() {
   const [notesTab, setNotesTab] = useState<'notes' | 'bookmarks' | 'kindling'>('notes');
   const [showWizard, setShowWizard] = useState(false);
   const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
+  const [wallpaperKey, setWallpaperKey] = useState(0);
 
   useEffect(() => {
     storage.getSettings().then(setSettings);
@@ -48,12 +49,14 @@ function LuminaApp() {
       const pick = active[Math.floor(Math.random() * active.length)];
       const blob = await storage.getWallpaperBlob(pick.id);
       if (blob && !revoked) {
-        const url = URL.createObjectURL(blob);
-        setWallpaperUrl(url);
+        setWallpaperUrl(url => {
+          if (url) URL.revokeObjectURL(url);
+          return URL.createObjectURL(blob);
+        });
       }
     })();
     return () => { revoked = true; };
-  }, [settings.bgMode]);
+  }, [settings.bgMode, wallpaperKey]);
 
   const handleDirty = useCallback(async () => {
     const updated = await storage.getSettings();
@@ -83,6 +86,7 @@ function LuminaApp() {
             onClose={() => {
               setActivePanel(null);
               storage.getSettings().then(setSettings);
+              setWallpaperKey(k => k + 1);
             }}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
