@@ -5,7 +5,7 @@ import type { Note, LuminaSettings } from '@lumina/core';
 import { NoteEditor } from './NoteEditor';
 import { NoteTabBar } from './NoteTabBar';
 
-export type NotesPanelTab = 'notes' | 'bookmarks' | 'kindling';
+export type NotesPanelTab = 'notes' | 'bookmarks' | 'kindling' | 'snippets';
 
 interface NotesPanelProps {
   open: boolean;
@@ -14,6 +14,7 @@ interface NotesPanelProps {
   onTabChange: (tab: NotesPanelTab) => void;
   bookmarksSlot?: React.ReactNode;
   kindlingSlot?: React.ReactNode;
+  snippetsSlot?: React.ReactNode;
 }
 
 function uniqueTitle(notes: Note[], base = 'untitled'): string {
@@ -31,6 +32,7 @@ export function NotesPanel({
   onTabChange,
   bookmarksSlot,
   kindlingSlot,
+  snippetsSlot,
 }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
@@ -231,6 +233,13 @@ export function NotesPanel({
           {kindlingSlot ?? <div style={emptyStyle}>Kindling not configured.</div>}
         </div>
       )}
+
+      {/* Snippets tab */}
+      {activeTab === 'snippets' && (
+        <div style={tabContentStyle}>
+          {snippetsSlot ?? <div style={emptyStyle}>Snippets not configured.</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -239,6 +248,7 @@ const MAIN_TABS: { id: NotesPanelTab; label: string }[] = [
   { id: 'notes', label: 'Notes' },
   { id: 'bookmarks', label: 'Bookmarks' },
   { id: 'kindling', label: 'Kindling' },
+  { id: 'snippets', label: 'Snippets' },
 ];
 
 const panelStyle: React.CSSProperties = {

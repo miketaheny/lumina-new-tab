@@ -2,11 +2,11 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type {
   LuminaSettings, QuickLinksData, Note, KindlingData,
-  BookmarksData, WallpapersManifest, SyncMeta,
+  BookmarksData, WallpapersManifest, SyncMeta, SnippetsData,
 } from './types';
 import {
   DEFAULT_SETTINGS, DEFAULT_QUICK_LINKS, DEFAULT_KINDLING,
-  DEFAULT_BOOKMARKS, DEFAULT_WALLPAPERS, DEFAULT_SYNC_META,
+  DEFAULT_BOOKMARKS, DEFAULT_WALLPAPERS, DEFAULT_SYNC_META, DEFAULT_SNIPPETS,
 } from './defaults';
 
 const DB_NAME = 'lumina-cache';
@@ -88,6 +88,13 @@ export const storage = {
   },
   async setBookmarks(data: BookmarksData): Promise<void> {
     await setVal('bookmarks', data);
+  },
+
+  async getSnippets(): Promise<SnippetsData> {
+    return (await getVal<SnippetsData>('snippets')) ?? { ...DEFAULT_SNIPPETS, snippets: [] };
+  },
+  async setSnippets(data: SnippetsData): Promise<void> {
+    await setVal('snippets', data);
   },
 
   async getWallpapers(): Promise<WallpapersManifest> {
