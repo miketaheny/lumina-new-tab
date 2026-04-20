@@ -22,6 +22,7 @@ function NewTab() {
   const [ready, setReady] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [wallpaperUrl, setWallpaperUrl] = useState<string | undefined>();
+  const [wallpaperKey, setWallpaperKey] = useState(0);
 
   useEffect(() => {
     storage.getSettings().then((s) => {
@@ -57,12 +58,14 @@ function NewTab() {
       const pick = active[Math.floor(Math.random() * active.length)];
       const blob = await storage.getWallpaperBlob(pick.id);
       if (blob && !revoked) {
-        const url = URL.createObjectURL(blob);
-        setWallpaperUrl(url);
+        setWallpaperUrl(url => {
+          if (url) URL.revokeObjectURL(url);
+          return URL.createObjectURL(blob);
+        });
       }
     })();
     return () => { revoked = true; };
-  }, [settings.bgMode]);
+  }, [settings.bgMode, wallpaperKey]);
 
   const handleDirty = useCallback(async () => {
     const updated = await storage.getSettings();
@@ -94,6 +97,7 @@ function NewTab() {
             onClose={() => {
               setActivePanel(null);
               storage.getSettings().then(setSettings);
+              setWallpaperKey(k => k + 1);
             }}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}

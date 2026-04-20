@@ -55,7 +55,8 @@ async function setVal<T>(key: string, val: T): Promise<void> {
 
 export const storage = {
   async getSettings(): Promise<LuminaSettings> {
-    return (await getVal<LuminaSettings>('settings')) ?? { ...DEFAULT_SETTINGS };
+    const stored = await getVal<Partial<LuminaSettings>>('settings');
+    return stored ? { ...DEFAULT_SETTINGS, ...stored } : { ...DEFAULT_SETTINGS };
   },
   async setSettings(data: LuminaSettings): Promise<void> {
     await setVal('settings', data);

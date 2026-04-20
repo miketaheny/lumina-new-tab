@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { storage } from '@lumina/core';
 import type { WallpapersManifest, WallpaperEntry } from '@lumina/core';
 
@@ -17,12 +17,35 @@ interface EditState {
 
 export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
   const [editState, setEditState] = useState<EditState | null>(null);
-  const [addLabel, setAddLabel] = useState('');
   const [addEmoji, setAddEmoji] = useState('🌅');
   const [showAddEmojiPicker, setShowAddEmojiPicker] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { wallpapers, activeIds } = manifest;
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls: string[] = [];
+    (async () => {
+      const map: Record<string, string> = {};
+      for (const wp of wallpapers) {
+        if (cancelled) break;
+        const blob = await storage.getWallpaperBlob(wp.id);
+        if (blob && !cancelled) {
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          map[wp.id] = url;
+        }
+      }
+      if (!cancelled) setPreviews(map);
+    })();
+    return () => {
+      cancelled = true;
+      urls.forEach(u => URL.revokeObjectURL(u));
+    };
+  }, [wallpapers.length, wallpapers.map(w => w.id).join(',')]);
 
   function toggleActive(id: string) {
     const next = activeIds.includes(id)
@@ -33,6 +56,8 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
 
   function deleteWallpaper(id: string) {
     storage.deleteWallpaperBlob(id);
+    if (previews[id]) URL.revokeObjectURL(previews[id]);
+    setPreviews(p => { const n = { ...p }; delete n[id]; return n; });
     onChange({
       ...manifest,
       wallpapers: wallpapers.filter(w => w.id !== id),
@@ -59,10 +84,13 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     let current = manifest;
+    const newPreviews: Record<string, string> = {};
     for (const file of files) {
       const name = file.name.replace(/\.[^.]+$/, '');
       const id = 'wp-u-' + Date.now() + '-' + Math.random().toString(36).slice(2);
       await storage.setWallpaperBlob(id, file);
+      const url = URL.createObjectURL(file);
+      newPreviews[id] = url;
       const newWp: WallpaperEntry = {
         id,
         source: 'drive',
@@ -75,6 +103,7 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
         wallpapers: [...current.wallpapers, newWp],
       };
     }
+    setPreviews(p => ({ ...p, ...newPreviews }));
     onChange(current);
     e.target.value = '';
   }
@@ -85,16 +114,24 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
         {wallpapers.map(wp => {
           const active = activeIds.includes(wp.id);
           const isEditing = editState?.id === wp.id;
+          const isHovered = hoveredId === wp.id;
+          const preview = previews[wp.id];
           return (
             <div
               key={wp.id}
               style={{
                 ...cardStyle,
+                backgroundImage: preview ? `url(${preview})` : undefined,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
                 outline: active ? '2px solid rgba(167,139,250,0.7)' : '2px solid transparent',
                 outlineOffset: 2,
               }}
               onClick={() => !isEditing && toggleActive(wp.id)}
+              onMouseEnter={() => setHoveredId(wp.id)}
+              onMouseLeave={() => setHoveredId(null)}
             >
+              {!preview && <div style={placeholderStyle}>{wp.emoji}</div>}
               <div style={checkStyle(active)}>✓</div>
 
               {isEditing ? (
@@ -126,9 +163,12 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
                 </div>
               ) : (
                 <>
-                  <div style={cardNameStyle}>{wp.emoji} {wp.label}</div>
-                  <div style={cardBtnsStyle} className="wp-card-btns" onClick={e => e.stopPropagation()}>
-                    <button style={cardBtnStyle} title="Edit" onClick={() => startEdit(wp)}>✏</button>
+                  <div style={cardNameStyle}>{wp.label}</div>
+                  <div
+                    style={{ ...cardBtnsStyle, opacity: isHovered ? 1 : 0 }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <button style={cardBtnStyle} title="Rename" onClick={() => startEdit(wp)}>✏</button>
                     <button
                       style={{ ...cardBtnStyle, color: '#f87171' }}
                       title="Delete"
@@ -157,7 +197,7 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
           style={{ display: 'none' }}
           onChange={handleFileUpload}
         />
-        <div style={emojiSelectorStyle}>
+        <div style={{ position: 'relative' }}>
           <span
             style={emojiPickerBtnStyle}
             title="Select emoji for next upload"
@@ -190,7 +230,7 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
   gap: 8,
   marginBottom: 12,
 };
@@ -200,7 +240,7 @@ const cardStyle: React.CSSProperties = {
   padding: '8px',
   cursor: 'pointer',
   position: 'relative',
-  minHeight: 64,
+  minHeight: 80,
   display: 'flex',
   alignItems: 'flex-end',
   justifyContent: 'space-between',
@@ -208,6 +248,16 @@ const cardStyle: React.CSSProperties = {
   transition: 'outline 0.15s',
   overflow: 'hidden',
   userSelect: 'none',
+};
+
+const placeholderStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 28,
+  opacity: 0.5,
 };
 
 function checkStyle(active: boolean): React.CSSProperties {
@@ -234,8 +284,8 @@ function checkStyle(active: boolean): React.CSSProperties {
 const cardNameStyle: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 600,
-  color: 'rgba(255,255,255,0.9)',
-  textShadow: '0 1px 6px rgba(0,0,0,1)',
+  color: 'rgba(255,255,255,0.95)',
+  textShadow: '0 1px 4px rgba(0,0,0,0.9)',
   position: 'relative',
   zIndex: 1,
   flex: 1,
@@ -247,12 +297,12 @@ const cardBtnsStyle: React.CSSProperties = {
   position: 'absolute',
   top: 4,
   right: 4,
-  opacity: 0,
   transition: 'opacity 0.15s',
+  zIndex: 3,
 };
 
 const cardBtnStyle: React.CSSProperties = {
-  background: 'rgba(0,0,0,0.5)',
+  background: 'rgba(0,0,0,0.6)',
   border: '1px solid rgba(255,255,255,0.15)',
   borderRadius: 5,
   padding: '2px 5px',
@@ -331,10 +381,6 @@ const uploadBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'Inter, sans-serif',
   transition: 'background 0.15s',
-};
-
-const emojiSelectorStyle: React.CSSProperties = {
-  position: 'relative',
 };
 
 const emojiGridStyle: React.CSSProperties = {

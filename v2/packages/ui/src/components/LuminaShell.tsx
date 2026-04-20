@@ -24,8 +24,11 @@ export function LuminaShell({
 
       <div
         id="bg-wallpaper"
-        className={`${styles.wallpaper}${wallpaperUrl ? ` ${styles.wallpaperActive}` : ''}`}
-        style={wallpaperUrl ? { backgroundImage: `url(${wallpaperUrl})` } : undefined}
+        className={styles.wallpaper}
+        style={{
+          opacity: wallpaperUrl ? 1 : 0,
+          backgroundImage: wallpaperUrl ? `url(${wallpaperUrl})` : undefined,
+        }}
       />
 
       {showGrain && <div className={styles.grain} />}
