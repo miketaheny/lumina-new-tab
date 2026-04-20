@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { storage } from '@lumina/core';
 import { markDirty, schedulePush } from '@lumina/drive';
 import type { Note, LuminaSettings } from '@lumina/core';
-import { NoteEditor } from './NoteEditor';
+import { NoteEditor, type NoteEditorHandle } from './NoteEditor';
 import { NoteTabBar } from './NoteTabBar';
 
 export type NotesPanelTab = 'notes' | 'bookmarks' | 'kindling' | 'snippets';
@@ -37,6 +37,7 @@ export function NotesPanel({
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
+  const editorRef = useRef<NoteEditorHandle>(null);
   const pendingContentRef = useRef<Map<string, string>>(new Map());
   const [panelTheme, setPanelTheme] = useState<LuminaSettings['panelTheme']>('dark');
 
@@ -206,9 +207,11 @@ export function NotesPanel({
             onAdd={addNote}
             onDelete={deleteNote}
             onRename={renameNote}
+            onClearCompleted={() => editorRef.current?.clearCompleted()}
           />
           {activeNote ? (
             <NoteEditor
+              ref={editorRef}
               key={activeNote.id}
               content={editorContent}
               onChange={handleContentChange}

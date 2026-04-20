@@ -10,9 +10,10 @@ desktop.ini
 *.swo
 *~
 
-# Build artifacts (if a build step is added later)
+# Build artifacts
 dist/
 build/
+v1/build/
 
 # Packed extensions
 *.crx
@@ -20,9 +21,10 @@ build/
 *.pem
 releases/
 
-# Node (if npm tooling is added later)
+# Node
 node_modules/
 /package-lock.json
+v1/package-lock.json
 yarn.lock
 
 # Local todo scratchpad (durable audit trail lives in DONE.md)
