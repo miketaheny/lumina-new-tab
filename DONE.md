@@ -147,6 +147,12 @@ Added "Save to Kindling" and "Add to Quick Links" context menus to background se
 Consolidated address types, added full CRUD address book UI as Autofill tab in settings, syncs entries to chrome.storage.local for background context menus — commit: 3b6dd78 2026.04.20 00:20:00
 ```
 
+- [x] CHORE: Notes / Settings side panel should split with main window, not slide over, when open main panel gets smaller. let side panel drag width, save in settings (hidden).
+
+```RESULT:
+Converted side panel from position:fixed overlay to flex split layout with drag-to-resize handle. Width persists to panelWidth setting and syncs via Drive. Both web and extension updated — commit: e4e8fb7 2026.04.20 13:00:00
+```
+
 - [x] CHORE: update readme and user guide as needed based on changes
 
 ```RESULT:
