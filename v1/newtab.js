@@ -28,9 +28,6 @@ const DEFAULT_STATE = {
   greetingCustom: false,
   greetingCustomText: '',
   panelTheme: 'dark',
-  bmFolderId: null,
-  bmAutoSync: false,
-  bmMerge: true,
   notesPanelOpen: true,
   qlIconsOnly: false,
   qlSections: [{ id: 'default', label: 'Quick Links' }],
@@ -505,9 +502,7 @@ function renderLinks() {
   grid.classList.toggle('icons-only', iconMode);
   document.getElementById('ql-icon-toggle').classList.toggle('on', iconMode);
 
-  // Bookmark-synced links are managed from the side-panel Bookmarks tab, not
-  // the main-panel quick-links list.
-  const visibleLinks = (state.links || []).filter(l => !l.fromBookmark);
+  const visibleLinks = state.links || [];
   if (!visibleLinks.length) {
     empty.style.display = 'block';
     return;
@@ -577,87 +572,10 @@ function renderLinks() {
     });
   }
 
-  renderSidePanelQuickLinks();
 }
 
 function svgFromString(str) {
   return new DOMParser().parseFromString(str, 'text/html').body.firstChild;
-}
-
-function renderSidePanelQuickLinks() {
-  const host = document.getElementById('bm-quicklinks');
-  if (!host) return;
-  const links = (state.links || []).filter(l => !l.fromBookmark);
-
-  host.replaceChildren();
-
-  const header = document.createElement('div');
-  header.className = 'bm-ql-header';
-  const title = document.createElement('span');
-  title.textContent = 'Quick Links';
-  const addBtn = document.createElement('button');
-  addBtn.className = 'bm-ql-add';
-  addBtn.title = 'Add link';
-  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
-  addBtn.addEventListener('click', () => openAddModal());
-  header.append(title, addBtn);
-  host.appendChild(header);
-
-  if (!links.length) {
-    const empty = document.createElement('div');
-    empty.className = 'bm-ql-empty';
-    empty.textContent = 'No quick links yet.';
-    host.appendChild(empty);
-    return;
-  }
-
-  links.forEach(link => {
-    const row = document.createElement('div');
-    row.className = 'bm-row';
-
-    const chev = document.createElement('span');
-    chev.className = 'bm-chevron empty';
-
-    const icon = document.createElement('span');
-    icon.className = 'bm-icon';
-    if (link.icon && HEROICONS[link.icon]) {
-      icon.style.color = 'var(--text-muted)';
-      icon.appendChild(svgFromString(heroiconSvg(link.icon, 14)));
-    } else {
-      const img = document.createElement('img');
-      img.alt = '';
-      img.src = link.favicon || getFaviconUrl(link.url) || '';
-      img.addEventListener('error', () => { img.style.display = 'none'; });
-      icon.appendChild(img);
-    }
-
-    const label = document.createElement('span');
-    label.className = 'bm-label';
-    label.textContent = link.label || getUrlLabel(link.url);
-    label.title = link.url;
-
-    const actions = document.createElement('span');
-    actions.className = 'bm-actions';
-    const editBtn = document.createElement('button');
-    editBtn.className = 'bm-act';
-    editBtn.title = 'Edit';
-    editBtn.appendChild(svgFromString(bmEditSvg()));
-    editBtn.addEventListener('click', e => { e.stopPropagation(); openEditModal(link.id); });
-    const delBtn = document.createElement('button');
-    delBtn.className = 'bm-act';
-    delBtn.title = 'Delete';
-    delBtn.appendChild(svgFromString(bmDeleteSvg()));
-    delBtn.addEventListener('click', e => { e.stopPropagation(); deleteLink(link.id); });
-    actions.append(editBtn, delBtn);
-
-    row.append(chev, icon, label, actions);
-    row.addEventListener('click', () => { window.location.href = link.url; });
-    row.addEventListener('auxclick', e => {
-      if (e.button === 1) { e.preventDefault(); window.open(link.url, '_blank'); }
-    });
-
-    host.appendChild(row);
-  });
 }
 
 // ─── ICON MODE FLOAT MENU ───────────────────────
@@ -738,9 +656,6 @@ function escHtml(s) {
 }
 
 function deleteLink(id) {
-  const link = state.links.find(l => l.id === id);
-  const chromeId = link?.bmId || (link?.fromBookmark && link?.id?.startsWith('bm-') ? link.id.slice(3) : null);
-  if (chromeId && chrome?.bookmarks) chrome.bookmarks.remove(chromeId).catch(() => {});
   state.links = state.links.filter(l => l.id !== id);
   saveState(); renderLinks();
 }
@@ -1915,7 +1830,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     hideModal();
     hideExportModal();
-    hideBmModal();
     closeSaveModal();
     closeSettingsPanel();
     closeNotesPanel();
@@ -1947,260 +1861,9 @@ document.querySelectorAll('.notes-tab').forEach(tab => {
     const which = tab.dataset.tab;
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
     document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
-    document.getElementById('bookmarks-tab-content').classList.toggle('active', which === 'bookmarks');
     document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
-    if (which === 'bookmarks') renderBookmarksTree();
   });
 });
-
-// ─── BOOKMARKS TREE ──────────────────────────────────────────────────────────
-const BM_COLLAPSED_KEY = 'lumina_bm_collapsed';
-let bmCollapsed = new Set(JSON.parse(localStorage.getItem(BM_COLLAPSED_KEY) || '[]'));
-function bmSaveCollapsed() {
-  localStorage.setItem(BM_COLLAPSED_KEY, JSON.stringify([...bmCollapsed]));
-}
-
-function bmChevronSvg() {
-  return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-}
-function bmFolderSvg() {
-  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-}
-function bmEditSvg() {
-  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
-}
-function bmDeleteSvg() {
-  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
-}
-
-function bmMakeFolderRow(node) {
-  const row = document.createElement('div');
-  row.className = 'bm-row';
-  const collapsed = bmCollapsed.has(node.id);
-  const hasChildren = (node.children || []).length > 0;
-  const chev = document.createElement('span');
-  chev.className = 'bm-chevron' + (collapsed ? ' collapsed' : '') + (hasChildren ? '' : ' empty');
-  chev.innerHTML = bmChevronSvg();
-  const icon = document.createElement('span');
-  icon.className = 'bm-icon';
-  icon.style.color = 'var(--text-muted)';
-  icon.innerHTML = bmFolderSvg();
-  const label = document.createElement('span');
-  label.className = 'bm-label bm-folder-label';
-  label.textContent = node.title || '(unnamed folder)';
-
-  const actions = document.createElement('span');
-  actions.className = 'bm-actions';
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'bm-act';
-  addBtn.title = 'New subfolder';
-  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
-  addBtn.addEventListener('click', e => { e.stopPropagation(); bmCreateFolder(node.id); });
-  actions.appendChild(addBtn);
-
-  const isRoot = ['0', '1', '2', '3'].includes(node.id);
-  if (!isRoot) {
-    const editBtn = document.createElement('button');
-    editBtn.className = 'bm-act';
-    editBtn.title = 'Rename folder';
-    editBtn.appendChild(svgFromString(bmEditSvg()));
-    editBtn.addEventListener('click', e => { e.stopPropagation(); bmRenameFolder(node); });
-    const delBtn = document.createElement('button');
-    delBtn.className = 'bm-act';
-    delBtn.title = 'Delete folder';
-    delBtn.appendChild(svgFromString(bmDeleteSvg()));
-    delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteFolder(node); });
-    actions.append(editBtn, delBtn);
-  }
-
-  row.append(chev, icon, label, actions);
-  return { row, chev };
-}
-
-async function bmCreateFolder(parentId) {
-  const title = prompt('New folder name:');
-  if (!title) return;
-  try {
-    await chrome.bookmarks.create({ parentId, title });
-    if (parentId) bmCollapsed.delete(parentId);
-    bmSaveCollapsed();
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] create folder failed', e); }
-}
-
-async function bmRenameFolder(node) {
-  const title = prompt('Rename folder:', node.title || '');
-  if (title === null) return;
-  try {
-    await chrome.bookmarks.update(node.id, { title });
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] rename folder failed', e); }
-}
-
-async function bmDeleteFolder(node) {
-  const count = (node.children || []).length;
-  const msg = count
-    ? `Delete folder "${node.title}" and all ${count} items inside?`
-    : `Delete folder "${node.title}"?`;
-  if (!confirm(msg)) return;
-  try {
-    await chrome.bookmarks.removeTree(node.id);
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] delete folder failed', e); }
-}
-
-function bmMakeBookmarkRow(node) {
-  const row = document.createElement('div');
-  row.className = 'bm-row';
-  const chev = document.createElement('span');
-  chev.className = 'bm-chevron empty';
-  const icon = document.createElement('span');
-  icon.className = 'bm-icon';
-  const img = document.createElement('img');
-  img.alt = '';
-  img.src = getFaviconUrl(node.url) || '';
-  img.addEventListener('error', () => { img.style.display = 'none'; });
-  icon.appendChild(img);
-  const label = document.createElement('span');
-  label.className = 'bm-label';
-  label.textContent = node.title || node.url;
-  label.title = node.url;
-
-  const actions = document.createElement('span');
-  actions.className = 'bm-actions';
-  const editBtn = document.createElement('button');
-  editBtn.className = 'bm-act';
-  editBtn.title = 'Edit';
-  editBtn.innerHTML = bmEditSvg();
-  editBtn.addEventListener('click', e => { e.stopPropagation(); bmEditBookmark(node); });
-  const delBtn = document.createElement('button');
-  delBtn.className = 'bm-act';
-  delBtn.title = 'Delete';
-  delBtn.innerHTML = bmDeleteSvg();
-  delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteBookmark(node); });
-  actions.append(editBtn, delBtn);
-
-  row.append(chev, icon, label, actions);
-  row.addEventListener('click', () => { window.location.href = node.url; });
-  row.addEventListener('auxclick', e => {
-    if (e.button === 1) { e.preventDefault(); window.open(node.url, '_blank'); }
-  });
-  return row;
-}
-
-function bmBuildNode(node) {
-  if (node.url) return bmMakeBookmarkRow(node);
-  const wrap = document.createElement('div');
-  wrap.className = 'bm-node';
-  const { row, chev } = bmMakeFolderRow(node);
-  const kids = document.createElement('div');
-  kids.className = 'bm-children' + (bmCollapsed.has(node.id) ? ' collapsed' : '');
-  (node.children || []).forEach(child => kids.appendChild(bmBuildNode(child)));
-  row.addEventListener('click', () => {
-    const isCollapsed = kids.classList.toggle('collapsed');
-    chev.classList.toggle('collapsed', isCollapsed);
-    if (isCollapsed) bmCollapsed.add(node.id); else bmCollapsed.delete(node.id);
-    bmSaveCollapsed();
-  });
-  wrap.append(row, kids);
-  return wrap;
-}
-
-function bmFilterTree(node, query) {
-  if (node.url) {
-    const hay = ((node.title || '') + ' ' + node.url).toLowerCase();
-    return hay.includes(query) ? { ...node } : null;
-  }
-  const kids = (node.children || []).map(c => bmFilterTree(c, query)).filter(Boolean);
-  if (!kids.length) return null;
-  return { ...node, children: kids };
-}
-
-async function bmEditBookmark(node) {
-  const newTitle = prompt('Edit bookmark title:', node.title || '');
-  if (newTitle === null) return;
-  const newUrl = prompt('Edit bookmark URL:', node.url || '');
-  if (newUrl === null) return;
-  try {
-    await chrome.bookmarks.update(node.id, { title: newTitle, url: newUrl });
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] edit failed', e); }
-}
-
-async function bmDeleteBookmark(node) {
-  if (!confirm(`Delete "${node.title || node.url}"?`)) return;
-  try {
-    await chrome.bookmarks.remove(node.id);
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] delete failed', e); }
-}
-
-async function renderBookmarksTree() {
-  const host = document.getElementById('bm-tree');
-  if (!host) return;
-  if (!chrome?.bookmarks) {
-    host.innerHTML = '<div class="bm-empty">Bookmarks API not available.</div>';
-    return;
-  }
-  try {
-    const tree = await chrome.bookmarks.getTree();
-    const searchEl = document.getElementById('bm-tree-search');
-    const query = (searchEl?.value || '').trim().toLowerCase();
-    host.innerHTML = '';
-    const roots = tree[0]?.children || [];
-    const visible = query
-      ? roots.map(r => bmFilterTree(r, query)).filter(Boolean)
-      : roots;
-    if (!visible.length) {
-      host.innerHTML = '<div class="bm-empty">No bookmarks match.</div>';
-      return;
-    }
-    visible.forEach(root => {
-      const kids = (root.children || []);
-      if (!kids.length && !query) return;
-      const wrap = document.createElement('div');
-      wrap.className = 'bm-node';
-      const { row, chev } = bmMakeFolderRow(root);
-      const kidsEl = document.createElement('div');
-      kidsEl.className = 'bm-children' + (bmCollapsed.has(root.id) ? ' collapsed' : '');
-      kids.forEach(child => kidsEl.appendChild(bmBuildNode(child)));
-      row.addEventListener('click', () => {
-        const isCollapsed = kidsEl.classList.toggle('collapsed');
-        chev.classList.toggle('collapsed', isCollapsed);
-        if (isCollapsed) bmCollapsed.add(root.id); else bmCollapsed.delete(root.id);
-        bmSaveCollapsed();
-      });
-      wrap.append(row, kidsEl);
-      host.appendChild(wrap);
-    });
-  } catch (e) {
-    host.innerHTML = '<div class="bm-empty">Error loading bookmarks.</div>';
-    console.error('[bookmarks] tree render failed', e);
-  }
-}
-
-{
-  const search = document.getElementById('bm-tree-search');
-  const refresh = document.getElementById('bm-tree-refresh');
-  let searchTimer;
-  search?.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(renderBookmarksTree, 150);
-  });
-  refresh?.addEventListener('click', () => renderBookmarksTree());
-  if (chrome?.bookmarks) {
-    const refreshIfOpen = () => {
-      if (document.getElementById('bookmarks-tab-content')?.classList.contains('active')) {
-        renderBookmarksTree();
-      }
-    };
-    chrome.bookmarks.onCreated?.addListener(refreshIfOpen);
-    chrome.bookmarks.onRemoved?.addListener(refreshIfOpen);
-    chrome.bookmarks.onChanged?.addListener(refreshIfOpen);
-    chrome.bookmarks.onMoved?.addListener(refreshIfOpen);
-  }
-}
 
 // ── Tiptap notes editor ──────────────────────────────────────────────────────────────
 const notesSource = document.getElementById('notes-source');
@@ -2630,7 +2293,7 @@ function hideExportModal() {
   setTimeout(() => { m.style.display = 'none'; }, 200);
 }
 
-document.getElementById('export-btn').addEventListener('click', openExportModal);
+document.getElementById('export-btn')?.addEventListener('click', openExportModal);
 document.getElementById('export-close').addEventListener('click', hideExportModal);
 document.getElementById('export-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('export-modal')) hideExportModal();
@@ -2657,229 +2320,6 @@ document.getElementById('export-copy-btn').addEventListener('click', () => {
     showToast('✓ Copied!');
   });
 });
-
-// ─── BOOKMARK SYNC ───────────────────────────────
-let bmFolderContents = []; // preview cache
-
-function hideBmModal() {
-  const m = document.getElementById('bm-modal');
-  if (m.style.display === 'none') return;
-  m.classList.add('closing');
-  m.querySelector('.modal').classList.add('closing');
-  setTimeout(() => { m.style.display = 'none'; }, 200);
-}
-
-async function openBmModal() {
-  const m = document.getElementById('bm-modal');
-  m.style.display = 'flex';
-  m.classList.remove('closing');
-  m.querySelector('.modal').classList.remove('closing');
-
-  // Sync toggle state
-  const autoToggle = document.getElementById('toggle-bm-autosync');
-  autoToggle.classList.toggle('on', !!state.bmAutoSync);
-  autoToggle.onclick = () => {
-    state.bmAutoSync = !state.bmAutoSync;
-    autoToggle.classList.toggle('on', state.bmAutoSync);
-    saveState();
-  };
-  const mergeToggle = document.getElementById('toggle-bm-merge');
-  mergeToggle.classList.toggle('on', state.bmMerge !== false);
-  mergeToggle.onclick = () => {
-    state.bmMerge = !mergeToggle.classList.contains('on');
-    mergeToggle.classList.toggle('on', state.bmMerge);
-    saveState();
-  };
-
-  await loadBookmarkFolders();
-}
-
-async function loadBookmarkFolders() {
-  const sel = document.getElementById('bm-folder-select');
-  sel.innerHTML = '<option value="">Loading…</option>';
-
-  if (!chrome?.bookmarks) {
-    sel.innerHTML = '<option value="">Bookmarks API not available</option>';
-    return;
-  }
-
-  try {
-    const tree = await chrome.bookmarks.getTree();
-    const folders = [];
-
-    function walk(node, path) {
-      if (!node.url && node.id !== '0') { // it's a folder
-        if (node.id !== '0') folders.push({ id: node.id, label: path || node.title });
-      }
-      (node.children || []).forEach(child => {
-        const childPath = path ? `${path} / ${child.title}` : child.title;
-        walk(child, childPath);
-      });
-    }
-    tree.forEach(root => walk(root, ''));
-
-    sel.innerHTML = '<option value="">— Choose a folder —</option>';
-    folders.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.id;
-      opt.textContent = f.label;
-      if (state.bmFolderId === f.id) opt.selected = true;
-      sel.appendChild(opt);
-    });
-
-    if (state.bmFolderId) loadBmPreview(state.bmFolderId);
-  } catch (e) {
-    sel.innerHTML = '<option value="">Error loading bookmarks</option>';
-  }
-}
-
-async function loadBmPreview(folderId) {
-  const previewWrap = document.getElementById('bm-preview');
-  const previewList = document.getElementById('bm-preview-list');
-  previewList.innerHTML = '';
-  bmFolderContents = [];
-
-  if (!folderId || !chrome?.bookmarks) { previewWrap.style.display = 'none'; return; }
-
-  try {
-    const children = await chrome.bookmarks.getChildren(folderId);
-    const directBookmarks = children.filter(c => c.url);
-    const subfolders = children.filter(c => !c.url);
-    bmFolderContents = directBookmarks;
-
-    if (!directBookmarks.length && !subfolders.length) {
-      previewWrap.style.display = 'none'; return;
-    }
-
-    previewWrap.style.display = 'block';
-
-    // Show direct bookmarks (up to 6)
-    directBookmarks.slice(0, 6).forEach(bm => {
-      const item = document.createElement('div');
-      item.className = 'bm-preview-item';
-      const faviconUrl = getFaviconGoogleUrl(bm.url);
-      item.innerHTML = `
-        ${faviconUrl ? `<img src="${faviconUrl}" alt="" onerror="this.style.display='none'"/>` : ''}
-        <span><strong style="color:var(--text)">${escHtml(bm.title || getUrlLabel(bm.url))}</strong> &mdash; ${escHtml(getUrlLabel(bm.url))}</span>
-      `;
-      previewList.appendChild(item);
-    });
-    if (directBookmarks.length > 6) {
-      const more = document.createElement('div');
-      more.className = 'bm-preview-item';
-      more.style.justifyContent = 'center';
-      more.innerHTML = `<span>+${directBookmarks.length - 6} more links</span>`;
-      previewList.appendChild(more);
-    }
-
-    // Show subfolders as section previews
-    if (subfolders.length) {
-      const divider = document.createElement('div');
-      divider.style.cssText = 'font-size:10px;color:var(--text-muted);padding:4px 0 2px;opacity:0.7;';
-      divider.textContent = `📁 ${subfolders.length} subfolder${subfolders.length > 1 ? 's' : ''} → each becomes a section`;
-      previewList.appendChild(divider);
-      subfolders.forEach(folder => {
-        const row = document.createElement('div');
-        row.className = 'bm-preview-item';
-        row.innerHTML = `<span>📁 <strong style="color:var(--text)">${escHtml(folder.title)}</strong></span>`;
-        previewList.appendChild(row);
-      });
-    }
-  } catch (e) {
-    previewWrap.style.display = 'none';
-  }
-}
-
-document.getElementById('bm-folder-select').addEventListener('change', e => {
-  loadBmPreview(e.target.value);
-});
-
-document.getElementById('bm-cancel').addEventListener('click', hideBmModal);
-document.getElementById('bm-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('bm-modal')) hideBmModal();
-});
-
-document.getElementById('bm-apply').addEventListener('click', async () => {
-  const folderId = document.getElementById('bm-folder-select').value;
-  if (!folderId) { showToast('Please select a folder first'); return; }
-
-  state.bmFolderId = folderId;
-  saveState();
-
-  const result = await applyBmSync();
-  hideBmModal();
-  if (result) {
-    const { linkCount, sectionCount } = result;
-    const sectionNote = sectionCount > 1 ? ` across ${sectionCount} sections` : '';
-    showToast(`✓ Synced ${linkCount} link${linkCount !== 1 ? 's' : ''}${sectionNote} from bookmarks`);
-  }
-});
-
-async function applyBmSync() {
-  if (!state.bmFolderId || !chrome?.bookmarks) return;
-  try {
-    const children = await chrome.bookmarks.getChildren(state.bmFolderId);
-    const [folderNode] = await chrome.bookmarks.get(state.bmFolderId);
-    const rootName = folderNode?.title || 'Bookmarks';
-
-    const newSections = [];
-    const newLinks = [];
-
-    // Direct bookmark children → section named after the root folder
-    const directBookmarks = children.filter(c => c.url);
-    if (directBookmarks.length) {
-      const sectionId = 'bms-' + state.bmFolderId;
-      newSections.push({ id: sectionId, label: rootName, fromBookmark: true });
-      directBookmarks.forEach(bm => newLinks.push({
-        id: 'bm-' + bm.id, url: bm.url,
-        label: bm.title || getUrlLabel(bm.url),
-        favicon: null, section: sectionId, fromBookmark: true,
-      }));
-    }
-
-    // Subfolders → one section each
-    const subfolders = children.filter(c => !c.url);
-    for (const folder of subfolders) {
-      const subChildren = await chrome.bookmarks.getChildren(folder.id);
-      const subBookmarks = subChildren.filter(c => c.url);
-      if (!subBookmarks.length) continue;
-      const sectionId = 'bms-' + folder.id;
-      newSections.push({ id: sectionId, label: folder.title, fromBookmark: true });
-      subBookmarks.forEach(bm => newLinks.push({
-        id: 'bm-' + bm.id, url: bm.url,
-        label: bm.title || getUrlLabel(bm.url),
-        favicon: null, section: sectionId, fromBookmark: true,
-      }));
-    }
-
-    // Preserve custom display settings from existing bookmark links
-    const existingById = new Map(state.links.map(l => [l.id, l]));
-    for (const link of newLinks) {
-      const existing = existingById.get(link.id);
-      if (existing?.icon) link.icon = existing.icon;
-      if (existing?.noFavicon) link.noFavicon = existing.noFavicon;
-      if (existing?.faviconBg) link.faviconBg = existing.faviconBg;
-    }
-
-    if (state.bmMerge !== false) {
-      const manualLinks = state.links.filter(l => !l.fromBookmark);
-      const manualSections = (state.qlSections || []).filter(s => !s.fromBookmark);
-      state.links = [...manualLinks, ...newLinks];
-      state.qlSections = [...manualSections, ...newSections];
-    } else {
-      state.links = newLinks;
-      state.qlSections = newSections.length ? newSections : [{ id: 'default', label: 'Quick Links' }];
-    }
-
-    if (!state.qlSections?.length) state.qlSections = [{ id: 'default', label: 'Quick Links' }];
-
-    saveState();
-    renderLinks();
-    return { linkCount: newLinks.length, sectionCount: newSections.length };
-  } catch(e) {
-    console.warn('Bookmark sync failed', e);
-  }
-}
 
 // ─── SAVED LINKS ──────────────────────────────────
 const TAG_COLORS = [
@@ -3231,7 +2671,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
 
 // ─── INIT ────────────────────────────────────────
 function buildQuickLinksMarkdown() {
-  const links = (state.links || []).filter(l => !l.fromBookmark);
+  const links = state.links || [];
   let md = '# Quick Links\n\n';
   if (!links.length) return md + '_No links_\n';
   for (const link of links) {
