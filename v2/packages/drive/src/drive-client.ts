@@ -42,8 +42,16 @@ export async function findOrCreateFolder(name: string, parentId?: string): Promi
   return created.id;
 }
 
+let cachedLuminaFolderId: string | null = null;
+
 export async function getLuminaFolderId(): Promise<string> {
-  return findOrCreateFolder(LUMINA_FOLDER);
+  if (cachedLuminaFolderId) return cachedLuminaFolderId;
+  cachedLuminaFolderId = await findOrCreateFolder(LUMINA_FOLDER);
+  return cachedLuminaFolderId;
+}
+
+export function clearFolderCache(): void {
+  cachedLuminaFolderId = null;
 }
 
 export async function listFiles(folderId: string): Promise<DriveFile[]> {
@@ -79,9 +87,20 @@ export async function writeTextFile(
 ): Promise<DriveFile> {
   const headers = await driveHeaders();
 
-  if (existingFileId) {
+  let fileId = existingFileId;
+  if (!fileId) {
+    const q = `name='${name}' and '${folderId}' in parents and trashed=false`;
+    const searchResp = await fetch(
+      `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1&spaces=drive`,
+      { headers },
+    );
+    const searchData = await searchResp.json();
+    if (searchData.files?.length) fileId = searchData.files[0].id;
+  }
+
+  if (fileId) {
     const resp = await fetch(
-      `${UPLOAD_API}/files/${existingFileId}?uploadType=media&fields=id,name,mimeType,modifiedTime`,
+      `${UPLOAD_API}/files/${fileId}?uploadType=media&fields=id,name,mimeType,modifiedTime`,
       {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': mimeType },
@@ -111,9 +130,20 @@ export async function writeBlobFile(
 ): Promise<DriveFile> {
   const headers = await driveHeaders();
 
-  if (existingFileId) {
+  let fileId = existingFileId;
+  if (!fileId) {
+    const q = `name='${name}' and '${folderId}' in parents and trashed=false`;
+    const searchResp = await fetch(
+      `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1&spaces=drive`,
+      { headers },
+    );
+    const searchData = await searchResp.json();
+    if (searchData.files?.length) fileId = searchData.files[0].id;
+  }
+
+  if (fileId) {
     const resp = await fetch(
-      `${UPLOAD_API}/files/${existingFileId}?uploadType=media&fields=id,name,mimeType,modifiedTime`,
+      `${UPLOAD_API}/files/${fileId}?uploadType=media&fields=id,name,mimeType,modifiedTime`,
       {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': blob.type },
