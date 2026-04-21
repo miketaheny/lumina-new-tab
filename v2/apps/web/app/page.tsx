@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { storage, type LuminaSettings, DEFAULT_SETTINGS } from '@lumina/core';
+import { markDirty, schedulePush } from '@lumina/drive';
 import { onSyncStatus, pullAll } from '@lumina/drive';
 import { webAuthProvider } from '../lib/web-auth-provider';
 import {
@@ -76,9 +77,23 @@ function LuminaApp() {
     await webAuthProvider.signOut();
   }, []);
 
+  const savePanelWidthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlePanelWidthChange = useCallback((width: number) => {
+    setSettings(prev => ({ ...prev, panelWidth: width }));
+    if (savePanelWidthTimer.current) clearTimeout(savePanelWidthTimer.current);
+    savePanelWidthTimer.current = setTimeout(async () => {
+      const s = await storage.getSettings();
+      await storage.setSettings({ ...s, panelWidth: width, updatedAt: new Date().toISOString() });
+      await markDirty('settings');
+      schedulePush();
+    }, 500);
+  }, []);
+
   return (
     <LuminaShell
       panelOpen={activePanel !== null}
+      panelWidth={settings.panelWidth}
+      onPanelWidthChange={handlePanelWidthChange}
       panel={
         <>
           <SettingsPanel

@@ -167,12 +167,12 @@ export function NotesPanel({
 
   const activeNote = notes.find(n => n.id === activeNoteId);
 
+  if (!open) return null;
+
   return (
     <div style={{
       ...panelStyle,
       background: t.panelBg,
-      borderLeft: `1px solid ${t.border}`,
-      transform: open ? 'translateX(0)' : 'translateX(100%)',
     }}>
       {/* Panel header */}
       <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
@@ -255,21 +255,13 @@ const MAIN_TABS: { id: NotesPanelTab; label: string }[] = [
 ];
 
 const panelStyle: React.CSSProperties = {
-  position: 'fixed',
-  right: 0,
-  top: 0,
-  bottom: 0,
-  width: 'clamp(420px, 40vw, 800px)',
-  maxWidth: '100vw',
-  zIndex: 90,
+  width: '100%',
+  height: '100%',
   background: 'rgba(14,10,28,0.97)',
-  borderLeft: '1px solid rgba(255,255,255,0.1)',
   backdropFilter: 'blur(20px)',
   display: 'flex',
   flexDirection: 'column',
-  transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
-  boxShadow: '-4px 0 40px rgba(0,0,0,0.5)',
-  pointerEvents: 'auto',
+  overflow: 'hidden',
 };
 
 const panelHeaderStyle: React.CSSProperties = {

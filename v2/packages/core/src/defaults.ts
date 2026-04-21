@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: LuminaSettings = {
   greetingCustom: false,
   greetingCustomText: '',
   panelTheme: 'dark',
+  panelWidth: 520,
   notesPanelOpen: true,
   qlIconsOnly: false,
   qlCollapsed: {},

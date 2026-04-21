@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { storage, type LuminaSettings, DEFAULT_SETTINGS } from '@lumina/core';
-import { setAuthProvider, setupSyncListeners, onSyncStatus, pullAll } from '@lumina/drive';
+import { setAuthProvider, setupSyncListeners, onSyncStatus, pullAll, markDirty, schedulePush } from '@lumina/drive';
 import {
   LuminaShell, BackgroundCanvas, Clock, SearchBar,
   QuickLinks, FocusLine, Weather, BibleVerse,
@@ -85,11 +85,25 @@ function NewTab() {
     await extensionAuthProvider.signOut();
   }, []);
 
+  const savePanelWidthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlePanelWidthChange = useCallback((width: number) => {
+    setSettings(prev => ({ ...prev, panelWidth: width }));
+    if (savePanelWidthTimer.current) clearTimeout(savePanelWidthTimer.current);
+    savePanelWidthTimer.current = setTimeout(async () => {
+      const s = await storage.getSettings();
+      await storage.setSettings({ ...s, panelWidth: width, updatedAt: new Date().toISOString() });
+      await markDirty('settings');
+      schedulePush();
+    }, 500);
+  }, []);
+
   if (!ready) return null;
 
   return (
     <LuminaShell
       panelOpen={activePanel !== null}
+      panelWidth={settings.panelWidth}
+      onPanelWidthChange={handlePanelWidthChange}
       panel={
         <>
           <SettingsPanel
