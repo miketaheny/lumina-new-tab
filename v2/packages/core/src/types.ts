@@ -116,6 +116,7 @@ export interface LuminaSettings {
   greetingCustom: boolean;
   greetingCustomText: string;
   panelTheme: 'dark' | 'light' | 'system';
+  panelWidth: number;
   notesPanelOpen: boolean;
   qlIconsOnly: boolean;
   qlCollapsed: Record<string, boolean>;

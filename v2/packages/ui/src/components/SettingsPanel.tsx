@@ -57,24 +57,13 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
   const isDark = settings?.panelTheme === 'system' ? systemDark : (settings?.panelTheme ?? 'dark') === 'dark';
   const t = useMemo(() => isDark ? DARK_TOKENS : LIGHT_TOKENS, [isDark]);
 
-  function handleBackdropClick(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
-  }
+  if (!open) return null;
 
   return (
-    <>
-      {open && (
-        <div
-          style={overlayStyle}
-          onClick={handleBackdropClick}
-        />
-      )}
-      <div style={{
-        ...panelStyle,
-        background: t.panelBg,
-        borderLeft: `1px solid ${t.border}`,
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
-      }}>
+    <div style={{
+      ...panelStyle,
+      background: t.panelBg,
+    }}>
         <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
           <span style={{ ...panelTitleStyle, color: t.textStrong }}>Settings</span>
           <button style={{ ...closeBtnStyle, color: t.textMuted, borderColor: t.border }} onClick={onClose} title="Close">
@@ -165,7 +154,6 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
           )}
         </div>
       </div>
-    </>
   );
 }
 
@@ -181,30 +169,14 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'sync', label: 'Sync' },
 ];
 
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 89,
-  background: 'rgba(0,0,0,0.4)',
-  pointerEvents: 'auto',
-};
-
 const panelStyle: React.CSSProperties = {
-  position: 'fixed',
-  right: 0,
-  top: 0,
-  bottom: 0,
-  width: 'clamp(420px, 40vw, 800px)',
-  maxWidth: '100vw',
-  zIndex: 90,
+  width: '100%',
+  height: '100%',
   background: 'rgba(14,10,28,0.97)',
-  borderLeft: '1px solid rgba(255,255,255,0.1)',
   backdropFilter: 'blur(20px)',
   display: 'flex',
   flexDirection: 'column',
-  transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
-  boxShadow: '-4px 0 40px rgba(0,0,0,0.5)',
-  pointerEvents: 'auto',
+  overflow: 'hidden',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
