@@ -2131,16 +2131,6 @@
       color: #a78bfa;
       margin-bottom: 24px;
     }
-    .setup-icon.connected {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: rgba(74, 222, 128, 0.2);
-      color: #4ade80;
-    }
-    .setup-icon.done {
-      background: rgba(251, 191, 36, 0.1);
-      border-color: rgba(251, 191, 36, 0.2);
-      color: #fbbf24;
-    }
     .setup-title {
       font-family: 'Inter', sans-serif;
       font-size: 24px;
@@ -2157,51 +2147,6 @@
       margin-bottom: 28px;
     }
     .setup-desc strong { color: rgba(255, 255, 255, 0.7); }
-    .setup-fields {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-bottom: 16px;
-      text-align: left;
-    }
-    .setup-field label {
-      display: block;
-      font-family: 'Inter', sans-serif;
-      font-size: 11px;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.4);
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
-    .setup-field input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
-      padding: 12px 14px;
-      color: rgba(255, 255, 255, 0.8);
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .setup-field input:focus {
-      border-color: rgba(167, 139, 250, 0.4);
-    }
-    .setup-field input::placeholder {
-      color: rgba(255, 255, 255, 0.2);
-    }
-    #setup-test-status {
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      min-height: 20px;
-      margin-bottom: 12px;
-      transition: color 0.2s;
-    }
-    #setup-test-status.success { color: #4ade80; }
-    #setup-test-status.error { color: #f87171; }
-    #setup-test-status.testing { color: #60a5fa; }
     .setup-actions {
       display: flex;
       gap: 10px;
@@ -2325,31 +2270,6 @@
     #notes-panel.open {
       transform: translateX(0);
     }
-
-    #sync-status-bar {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      padding: 7px 16px;
-      border-top: 1px solid var(--glass-border);
-      font-size: 11px;
-      font-family: 'Inter', sans-serif;
-      color: var(--text-muted);
-      flex-shrink: 0;
-      transition: opacity 0.2s;
-    }
-    #sync-status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: rgba(251,191,36,0.7);
-      transition: background 0.3s;
-    }
-    #sync-status-bar.connected #sync-status-dot { background: rgba(74,222,128,0.85); }
-    #sync-status-bar.disconnected #sync-status-dot { background: rgba(251,80,80,0.75); }
-    #sync-status-bar.syncing #sync-status-dot { background: rgba(96,165,250,0.8); animation: pulse-dot 1s infinite; }
-    @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
     @media (max-width: 768px) {
       #notes-panel {
@@ -3515,27 +3435,6 @@
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Sync via Asana (private project)</div>
-      <p class="help-p">Notes sync to Asana as tasks inside a private "Lumina Notes" project (private to you, invisible
-        to your organization). Settings → Sync.</p>
-      <div class="help-row"><span class="help-row-label">Setup</span><span class="help-row-desc">Asana → Profile → My
-          Settings → Apps → Manage Developer Apps → create a Personal Access Token → paste it into Settings →
-          Sync → Connect</span></div>
-      <div class="help-row"><span class="help-row-label">First use</span><span class="help-row-desc">Creates a
-          "Lumina Notes" private project in your workspace and pushes any existing local notes as tasks</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-push</span><span class="help-row-desc">3 seconds after
-          any edit. Also flushes immediately when you switch tabs, switch apps, or close the window.</span></div>
-      <div class="help-row"><span class="help-row-label">Auto-pull</span><span class="help-row-desc">When the tab
-          becomes visible again, edits you made to tasks in Asana are pulled back in.</span></div>
-      <div class="help-row"><span class="help-row-label">Deletes</span><span class="help-row-desc">Deleting a note
-          locally marks the corresponding Asana task complete (reversible from Asana).</span></div>
-      <div class="help-row"><span class="help-row-label">Exports</span><span class="help-row-desc">Download quick
-          links + saved links as markdown, or settings as JSON, from Settings → Sync.</span></div>
-      <div class="help-row"><span class="help-row-label">Not configured</span><span class="help-row-desc">Extension
-          works normally without sync — nothing changes</span></div>
-    </div>
-
-    <div class="help-section">
       <div class="help-section-title">Keyboard Shortcuts</div>
       <table class="help-shortcuts-table">
         <tr>
@@ -3707,8 +3606,7 @@
         <div class="settings-section">
           <div class="settings-section-title">Auto-fill forms</div>
           <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;">Right-click on any page
-            → <strong>Auto-fill form with</strong> → choose an entry. Add address book entries below; they sync with
-            your Asana project.</p>
+            → <strong>Auto-fill form with</strong> → choose an entry. Add address book entries below.</p>
           <div id="address-book-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
           <button id="address-book-add-btn" type="button"
             style="width:100%;padding:8px 12px;border-radius:8px;border:1px dashed var(--glass-border);background:rgba(167,139,250,0.08);color:var(--accent);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">+
@@ -3844,55 +3742,6 @@
           </div>
         </div>
 
-        <div class="settings-section" style="margin-bottom:0">
-          <div class="settings-section-title">Sync via Asana (private project)</div>
-          <div style="background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text-muted);line-height:1.5;">
-            <div style="font-weight:600;color:var(--text);margin-bottom:4px;">How to create a Personal Access Token</div>
-            <ol style="margin:0;padding-left:18px;">
-              <li>Open <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;">app.asana.com/0/my-apps</a> (or Profile → My Settings → Apps → Manage Developer Apps).</li>
-              <li>Click <strong>+ Create new token</strong>, name it (e.g. "Lumina"), and accept the terms.</li>
-              <li>Copy the token — Asana only shows it once.</li>
-              <li>Paste it below and click <strong>Connect</strong>. Lumina creates a private "Lumina Notes" project in your workspace.</li>
-            </ol>
-          </div>
-          <div class="field" style="margin-bottom:10px">
-            <label>Personal Access Token</label>
-            <input id="asana-pat" type="password" placeholder="Paste your Asana PAT" maxlength="200"
-              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
-          </div>
-          <div class="field" style="margin-bottom:10px">
-            <label>Workspace</label>
-            <select id="asana-workspace-select"
-              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;"></select>
-          </div>
-          <div class="field" style="margin-bottom:10px">
-            <label>Project</label>
-            <div style="font-size:13px;color:var(--text-muted);padding:8px 0;"><span id="asana-project-name">(not connected)</span></div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <button id="asana-connect-btn"
-              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Connect</button>
-            <button id="asana-disconnect-btn"
-              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Disconnect</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="sync-now-btn"
-              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Sync
-              Now</button>
-            <span id="sync-status"
-              style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
-          </div>
-          <div style="margin-top:8px;">
-            <span id="sync-gist-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px;">Notes sync as tasks in a private "Lumina Notes" project (private to you). Deleted notes are marked complete in Asana.</span>
-          </div>
-          <div style="margin-top:14px;display:flex;gap:8px;">
-            <button id="asana-export-links-btn"
-              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export links (.md)</button>
-            <button id="asana-export-settings-btn"
-              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Export settings (.json)</button>
-          </div>
-        </div>
-
         <div class="settings-section" style="margin-top:16px;">
           <div class="settings-section-title">Settings History</div>
           <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">Last 30 revisions are saved automatically. Restore any previous version below.</p>
@@ -4003,10 +3852,6 @@
       </div>
       <div id="notes-editor"></div>
       <textarea id="notes-source" spellcheck="false" placeholder="Markdown source…"></textarea>
-      <div id="sync-status-bar">
-        <span id="sync-status-dot"></span>
-        <span id="sync-status-text">Checking Asana…</span>
-      </div>
     </div>
 
     <!-- BOOKMARKS TAB -->
@@ -4233,67 +4078,15 @@
   <!-- WELCOME / SETUP OVERLAY -->
   <div id="setup-overlay">
     <div id="setup-card">
-      <!-- Step 1: Welcome -->
+      <!-- Welcome -->
       <div class="setup-step active" data-step="welcome">
         <div class="setup-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/>
-          </svg>
-        </div>
-        <h2 class="setup-title">Welcome to Lumina</h2>
-        <p class="setup-desc">Your new tab, reimagined. Connect Lumina to Asana to sync your notes with tasks in a private project.</p>
-        <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-connect-btn">Connect to Asana</button>
-          <button class="setup-btn ghost" id="setup-skip-btn">Skip for now</button>
-        </div>
-      </div>
-
-      <!-- Step 2: Configure -->
-      <div class="setup-step" data-step="configure">
-        <div class="setup-icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
-          </svg>
-        </div>
-        <h2 class="setup-title">Connect to Asana</h2>
-        <p class="setup-desc">Create a Personal Access Token in Asana (Profile → My Settings → Apps → Manage Developer Apps), then paste it below. Lumina will create a private "Lumina Notes" project and sync each note as a task.</p>
-        <div class="setup-fields">
-          <div class="setup-field">
-            <label>Personal Access Token</label>
-            <input id="setup-asana-pat" type="password" placeholder="Paste your Asana PAT" />
-          </div>
-        </div>
-        <div id="setup-test-status"></div>
-        <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-test-btn">Connect</button>
-          <button class="setup-btn ghost" id="setup-back-btn">Back</button>
-        </div>
-      </div>
-
-      <!-- Step 3: Connected / Import -->
-      <div class="setup-step" data-step="import">
-        <div class="setup-icon connected">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-          </svg>
-        </div>
-        <h2 class="setup-title">Connected</h2>
-        <p class="setup-desc">Asana is reachable. Push any existing local notes up to your private project as new tasks?</p>
-        <div class="setup-actions">
-          <button class="setup-btn primary" id="setup-import-btn">Push Notes to Asana</button>
-          <button class="setup-btn ghost" id="setup-fresh-btn">Start Fresh</button>
-        </div>
-      </div>
-
-      <!-- Step 4: Done -->
-      <div class="setup-step" data-step="done">
-        <div class="setup-icon done">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/>
           </svg>
         </div>
-        <h2 class="setup-title">You're all set</h2>
-        <p class="setup-desc" id="setup-done-desc">Lumina is ready. Enjoy your new tab.</p>
+        <h2 class="setup-title">Welcome to Lumina</h2>
+        <p class="setup-desc">Your new tab, reimagined. Enjoy your new tab.</p>
         <div class="setup-actions">
           <button class="setup-btn primary" id="setup-done-btn">Get Started</button>
         </div>
