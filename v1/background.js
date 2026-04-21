@@ -7,6 +7,11 @@ const CONTEXTS = ['all'];
 function buildContextMenu(entries) {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
+      id: 'lumina-add-quicklink',
+      title: 'Lumina: Add to Quick Links',
+      contexts: ['page', 'link'],
+    });
+    chrome.contextMenus.create({
       id: MENU_PARENT,
       title: 'Lumina: Auto-fill form with',
       contexts: CONTEXTS,
@@ -53,7 +58,44 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Build menu once when service worker starts (covers both install and restart)
 refreshContextMenu();
 
+async function addQuickLinkFromContextMenu(url, title) {
+  const id = 'ql-' + Date.now();
+  const newLink = { id, url, label: title, favicon: null, section: 'default', lastUpdate: Date.now() };
+
+  const stored = await chrome.storage.local.get(['lumina_raindrop_token', 'lumina_raindrop_collection_id']);
+  const token = (stored.lumina_raindrop_token || '').trim();
+  const collectionId = stored.lumina_raindrop_collection_id;
+
+  if (token && collectionId) {
+    try {
+      const resp = await fetch('https://api.raindrop.io/rest/v1/raindrop', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ link: url, title, collection: { '$id': collectionId }, cover: '', note: '' }),
+      });
+      if (resp.ok) {
+        const j = await resp.json();
+        if (j?.item?._id) {
+          newLink.raindropId = j.item._id;
+          newLink.id = 'rd-' + j.item._id;
+        }
+      }
+    } catch {}
+  }
+
+  const pendingResult = await chrome.storage.local.get('lumina_pending_quicklinks');
+  const pending = pendingResult.lumina_pending_quicklinks || [];
+  pending.push(newLink);
+  await chrome.storage.local.set({ lumina_pending_quicklinks: pending });
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'lumina-add-quicklink') {
+    const url = info.linkUrl || info.pageUrl;
+    const title = tab?.title || '';
+    addQuickLinkFromContextMenu(url, title || url);
+    return;
+  }
   if (!info.menuItemId || info.menuItemId === MENU_PARENT) return;
   if (info.menuItemId === 'lumina-autofill-empty') {
     chrome.tabs.create({ url: chrome.runtime.getURL('newtab.html') });

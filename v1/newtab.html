@@ -3637,6 +3637,40 @@
           </div>
         </div>
 
+        <div class="settings-section">
+          <div class="settings-section-title">Quick Links via Raindrop.io</div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            <div style="font-weight:600;color:var(--text);margin-bottom:4px;">How to get a Test Token</div>
+            <ol style="margin:0;padding-left:18px;">
+              <li>Open <a href="https://app.raindrop.io/settings/integrations" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;">app.raindrop.io/settings/integrations</a></li>
+              <li>Under <strong>For Developers</strong>, click <strong>Create new app</strong>, name it (e.g. "Lumina").</li>
+              <li>Open the app, click <strong>Create test token</strong> and copy it.</li>
+              <li>Paste it below and click <strong>Connect</strong>.</li>
+            </ol>
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Test Token</label>
+            <input id="raindrop-token" type="password" placeholder="Paste your Raindrop.io test token" maxlength="200"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label>Collection</label>
+            <div style="font-size:13px;color:var(--text-muted);padding:8px 0;"><span id="raindrop-collection-name">(not connected)</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button id="raindrop-connect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Connect</button>
+            <button id="raindrop-disconnect-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Disconnect</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="raindrop-sync-btn"
+              style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Sync Now</button>
+            <span id="raindrop-status"
+              style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
+          </div>
+        </div>
+
         <div class="settings-section" style="margin-top:16px;">
           <div class="settings-section-title">Settings History</div>
           <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">Last 30 revisions are saved automatically. Restore any previous version below.</p>
