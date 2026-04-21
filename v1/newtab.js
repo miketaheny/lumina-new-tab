@@ -656,6 +656,8 @@ function escHtml(s) {
 }
 
 function deleteLink(id) {
+  const link = state.links.find(l => l.id === id);
+  if (link?.raindropId) rdSyncOnDelete(link.raindropId);
   state.links = state.links.filter(l => l.id !== id);
   saveState(); renderLinks();
 }
@@ -694,6 +696,7 @@ function setupDrag(el) {
     state.links.splice(fromIdx, 1);
     state.links.splice(toIdx, 0, moved);
     saveState(); renderLinks();
+    rdSyncOnReorder();
   });
 }
 
@@ -770,9 +773,12 @@ document.getElementById('modal-save').addEventListener('click', async () => {
     if (link) {
       link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null;
       link.noFavicon = noFavicon || null; link.faviconBg = _modalFaviconBg !== 'white' ? _modalFaviconBg : null;
+      link.lastUpdate = Date.now();
+      rdSyncOnEdit(link);
     }
   } else {
-    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
+    let newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null, lastUpdate: Date.now() };
+    newLink = await rdSyncOnAdd(newLink);
     state.links.push(newLink);
   }
 
@@ -2666,7 +2672,328 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
       renderSavedFilters();
       renderSavedList();
     }
+    if (area === 'local' && changes.lumina_pending_quicklinks) {
+      consumePendingQuickLinks();
+    }
   });
+}
+
+// ─── RAINDROP.IO QUICK LINKS SYNC ───────────────
+const RAINDROP_API = 'https://api.raindrop.io/rest/v1';
+const RAINDROP_COLLECTION_NAME = 'Quick Links';
+let rdSyncInProgress = false;
+
+function getRaindropToken() { return (localStorage.getItem('lumina_raindrop_token') || '').trim(); }
+function setRaindropToken(v) {
+  localStorage.setItem('lumina_raindrop_token', (v || '').trim());
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.set({ lumina_raindrop_token: (v || '').trim() }).catch(() => {});
+  }
+}
+function getRaindropCollectionId() {
+  const v = localStorage.getItem('lumina_raindrop_collection_id');
+  return v ? Number(v) : null;
+}
+function setRaindropCollectionId(id) {
+  localStorage.setItem('lumina_raindrop_collection_id', id != null ? String(id) : '');
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.set({ lumina_raindrop_collection_id: id != null ? Number(id) : null }).catch(() => {});
+  }
+}
+function isRaindropConfigured() {
+  return !!(getRaindropToken() && getRaindropCollectionId());
+}
+
+function setRaindropStatus(msg) {
+  const el = document.getElementById('raindrop-status');
+  if (el) el.textContent = msg;
+}
+
+async function raindropApi(method, path, body) {
+  const token = getRaindropToken();
+  if (!token) throw new Error('No Raindrop.io token configured');
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/json',
+  };
+  if (body) headers['Content-Type'] = 'application/json';
+  const url = path.startsWith('http') ? path : `${RAINDROP_API}${path}`;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(url, opts);
+  if (!resp.ok) {
+    let detail = '';
+    try { const j = await resp.json(); detail = j?.errorMessage || ''; } catch {}
+    throw new Error(`Raindrop ${resp.status}${detail ? `: ${detail}` : ''}`);
+  }
+  if (resp.status === 204) return null;
+  return resp.json();
+}
+
+async function rdGetCollections() {
+  const j = await raindropApi('GET', '/collections');
+  return j?.items || [];
+}
+
+async function rdCreateCollection(title) {
+  const j = await raindropApi('POST', '/collection', { title });
+  return j?.item || null;
+}
+
+async function rdGetRaindrops(collectionId, page = 0, perpage = 50) {
+  const j = await raindropApi('GET', `/raindrops/${collectionId}?page=${page}&perpage=${perpage}&sort=sort`);
+  return j?.items || [];
+}
+
+async function rdGetAllRaindrops(collectionId) {
+  let all = [];
+  let page = 0;
+  while (true) {
+    const batch = await rdGetRaindrops(collectionId, page, 50);
+    all = all.concat(batch);
+    if (batch.length < 50) break;
+    page++;
+  }
+  return all;
+}
+
+async function rdCreateRaindrop(data) {
+  const j = await raindropApi('POST', '/raindrop', data);
+  return j?.item || null;
+}
+
+async function rdUpdateRaindrop(id, data) {
+  const j = await raindropApi('PUT', `/raindrop/${id}`, data);
+  return j?.item || null;
+}
+
+async function rdDeleteRaindrop(id) {
+  return raindropApi('DELETE', `/raindrop/${id}`);
+}
+
+async function rdFindOrCreateCollection() {
+  const collections = await rdGetCollections();
+  const existing = collections.find(c => c.title === RAINDROP_COLLECTION_NAME);
+  if (existing) return existing;
+  return await rdCreateCollection(RAINDROP_COLLECTION_NAME);
+}
+
+function rdParseNoteMeta(note) {
+  if (!note) return {};
+  try { return JSON.parse(note); } catch { return {}; }
+}
+
+function rdBuildNoteMeta(link) {
+  const meta = {};
+  if (link.icon) meta.icon = link.icon;
+  if (link.noFavicon) meta.noFavicon = true;
+  if (link.faviconBg && link.faviconBg !== 'white') meta.faviconBg = link.faviconBg;
+  return Object.keys(meta).length ? JSON.stringify(meta) : '';
+}
+
+function rdRaindropToLocal(rd) {
+  const meta = rdParseNoteMeta(rd.note);
+  return {
+    id: 'rd-' + rd._id,
+    raindropId: rd._id,
+    url: rd.link,
+    label: rd.title,
+    favicon: rd.cover || null,
+    section: 'default',
+    icon: meta.icon || null,
+    noFavicon: meta.noFavicon || null,
+    faviconBg: meta.faviconBg || null,
+    lastUpdate: rd.lastUpdate ? new Date(rd.lastUpdate).getTime() : 0,
+  };
+}
+
+function rdLocalToRaindrop(link, collectionId) {
+  return {
+    link: link.url,
+    title: link.label,
+    collection: { '$id': collectionId },
+    cover: link.favicon || '',
+    note: rdBuildNoteMeta(link),
+  };
+}
+
+async function rdSyncOnAdd(link) {
+  if (!isRaindropConfigured()) return link;
+  try {
+    const collectionId = getRaindropCollectionId();
+    const data = rdLocalToRaindrop(link, collectionId);
+    const existing = state.links.filter(l => l.raindropId);
+    data.order = existing.length;
+    const rd = await rdCreateRaindrop(data);
+    if (rd?._id) {
+      link.raindropId = rd._id;
+      link.id = 'rd-' + rd._id;
+    }
+  } catch (err) {
+    console.warn('Raindrop create failed:', err.message);
+  }
+  return link;
+}
+
+async function rdSyncOnEdit(link) {
+  if (!isRaindropConfigured() || !link.raindropId) return;
+  try {
+    const collectionId = getRaindropCollectionId();
+    await rdUpdateRaindrop(link.raindropId, {
+      link: link.url,
+      title: link.label,
+      cover: link.favicon || '',
+      note: rdBuildNoteMeta(link),
+    });
+  } catch (err) {
+    console.warn('Raindrop update failed:', err.message);
+  }
+}
+
+async function rdSyncOnDelete(raindropId) {
+  if (!isRaindropConfigured() || !raindropId) return;
+  try {
+    await rdDeleteRaindrop(raindropId);
+  } catch (err) {
+    console.warn('Raindrop delete failed:', err.message);
+  }
+}
+
+async function rdSyncOnReorder() {
+  if (!isRaindropConfigured()) return;
+  const linked = state.links.filter(l => l.raindropId && !l.fromBookmark);
+  for (let i = 0; i < linked.length; i++) {
+    try {
+      await rdUpdateRaindrop(linked[i].raindropId, { order: i });
+    } catch {}
+  }
+}
+
+async function rdPullSync() {
+  if (!isRaindropConfigured() || rdSyncInProgress) return;
+  rdSyncInProgress = true;
+  try {
+    setRaindropStatus('Syncing…');
+    const collectionId = getRaindropCollectionId();
+    const remoteRds = await rdGetAllRaindrops(collectionId);
+
+    const localByRdId = new Map();
+    const manualLinks = [];
+    for (const l of (state.links || [])) {
+      if (l.raindropId) localByRdId.set(l.raindropId, l);
+      else if (!l.fromBookmark) manualLinks.push(l);
+    }
+
+    const remoteById = new Map(remoteRds.map(rd => [rd._id, rd]));
+
+    const merged = [];
+
+    for (const rd of remoteRds) {
+      const local = localByRdId.get(rd._id);
+      if (local) {
+        const remoteTime = rd.lastUpdate ? new Date(rd.lastUpdate).getTime() : 0;
+        const localTime = local.lastUpdate || 0;
+        if (remoteTime > localTime) {
+          const updated = rdRaindropToLocal(rd);
+          updated.icon = local.icon || updated.icon;
+          if (local.noFavicon && !updated.icon) updated.noFavicon = local.noFavicon;
+          if (local.faviconBg) updated.faviconBg = local.faviconBg;
+          merged.push(updated);
+        } else {
+          merged.push(local);
+        }
+        localByRdId.delete(rd._id);
+      } else {
+        merged.push(rdRaindropToLocal(rd));
+      }
+    }
+
+    for (const orphan of localByRdId.values()) {
+      if (!remoteById.has(orphan.raindropId)) continue;
+      merged.push(orphan);
+    }
+
+    const bookmarkLinks = (state.links || []).filter(l => l.fromBookmark);
+    state.links = [...manualLinks, ...merged, ...bookmarkLinks];
+    saveState();
+    renderLinks();
+    const t = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    setRaindropStatus(`Synced ${merged.length} links — ${t}`);
+  } catch (err) {
+    setRaindropStatus(`Sync error: ${err.message}`);
+    console.warn('Raindrop pull sync error:', err);
+  } finally {
+    rdSyncInProgress = false;
+  }
+}
+
+function initRaindropSync() {
+  const tokenInput = document.getElementById('raindrop-token');
+  const collectionName = document.getElementById('raindrop-collection-name');
+  const connectBtn = document.getElementById('raindrop-connect-btn');
+  const disconnectBtn = document.getElementById('raindrop-disconnect-btn');
+  const syncBtn = document.getElementById('raindrop-sync-btn');
+
+  if (!tokenInput) return;
+
+  tokenInput.value = getRaindropToken();
+  const cid = getRaindropCollectionId();
+  if (collectionName && cid) collectionName.textContent = RAINDROP_COLLECTION_NAME;
+
+  tokenInput.addEventListener('change', () => {
+    setRaindropToken(tokenInput.value);
+  });
+
+  connectBtn?.addEventListener('click', async () => {
+    try {
+      setRaindropStatus('Connecting…');
+      if (!getRaindropToken()) throw new Error('Enter a test token');
+      const col = await rdFindOrCreateCollection();
+      if (!col?._id) throw new Error('Could not find or create collection');
+      setRaindropCollectionId(col._id);
+      if (collectionName) collectionName.textContent = col.title;
+      setRaindropStatus('Connected — click Sync to pull');
+      await rdPullSync();
+    } catch (err) {
+      setRaindropStatus(err.message);
+    }
+  });
+
+  disconnectBtn?.addEventListener('click', () => {
+    setRaindropToken('');
+    setRaindropCollectionId(null);
+    tokenInput.value = '';
+    if (collectionName) collectionName.textContent = '(not connected)';
+    setRaindropStatus('Disconnected');
+  });
+
+  syncBtn?.addEventListener('click', () => {
+    if (!isRaindropConfigured()) { setRaindropStatus('Connect to Raindrop.io first'); return; }
+    rdPullSync();
+  });
+
+  if (isRaindropConfigured()) {
+    if (collectionName) collectionName.textContent = RAINDROP_COLLECTION_NAME;
+    rdPullSync();
+  }
+}
+
+async function consumePendingQuickLinks() {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+  try {
+    const result = await chrome.storage.local.get('lumina_pending_quicklinks');
+    const pending = result.lumina_pending_quicklinks;
+    if (!Array.isArray(pending) || !pending.length) return;
+    await chrome.storage.local.remove('lumina_pending_quicklinks');
+    let changed = false;
+    for (const link of pending) {
+      const dup = state.links.find(l => l.url === link.url);
+      if (dup) continue;
+      state.links.push(link);
+      changed = true;
+    }
+    if (changed) { saveState(); renderLinks(); }
+  } catch {}
 }
 
 // ─── INIT ────────────────────────────────────────
@@ -2867,6 +3194,8 @@ function init() {
     renderSavedList();
   });
 
+  initRaindropSync();
+  consumePendingQuickLinks();
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
