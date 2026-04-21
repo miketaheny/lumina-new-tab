@@ -2044,31 +2044,6 @@
       color: var(--text);
     }
 
-    /* ─── BM PREVIEW ITEMS ─── */
-    .bm-preview-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.04);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .bm-preview-item img {
-      width: 14px;
-      height: 14px;
-      border-radius: 3px;
-      flex-shrink: 0;
-    }
-
-    .bm-preview-item span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
     /* ─── TOAST ─── */
     .toast {
       position: fixed;
@@ -2524,64 +2499,6 @@
     .notes-tab-pane.active {
       display: flex;
     }
-
-    /* Bookmarks tree */
-    #bm-tree { font-size: 12px; color: var(--text); }
-    .bm-node { display: flex; flex-direction: column; }
-    .bm-row {
-      display: flex; align-items: center; gap: 6px;
-      padding: 3px 6px; border-radius: 6px;
-      cursor: pointer; user-select: none;
-      color: var(--text); line-height: 1.3;
-    }
-    .bm-row:hover { background: var(--glass); }
-    .bm-chevron {
-      width: 12px; height: 12px; flex-shrink: 0;
-      display: inline-flex; align-items: center; justify-content: center;
-      color: var(--text-muted); transition: transform 0.12s;
-    }
-    .bm-chevron.collapsed { transform: rotate(-90deg); }
-    .bm-chevron.empty { visibility: hidden; }
-    .bm-icon {
-      width: 14px; height: 14px; flex-shrink: 0;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .bm-icon img { width: 14px; height: 14px; border-radius: 2px; }
-    .bm-label {
-      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .bm-folder-label { font-weight: 500; color: var(--text); }
-    .bm-children { margin-left: 14px; border-left: 1px solid var(--glass-border); padding-left: 4px; }
-    .bm-children.collapsed { display: none; }
-    .bm-actions {
-      display: none; gap: 2px; flex-shrink: 0;
-    }
-    .bm-row:hover .bm-actions { display: inline-flex; }
-    .bm-act {
-      width: 18px; height: 18px; padding: 0;
-      background: none; border: none; border-radius: 4px;
-      color: var(--text-muted); cursor: pointer;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .bm-act:hover { background: var(--glass); color: var(--text); }
-    .bm-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 11px; }
-
-    /* Quick links section inside Bookmarks tab */
-    .bm-ql-wrap { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); }
-    .bm-ql-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 6px 6px; font-size: 10px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-    .bm-ql-add {
-      width: 18px; height: 18px; padding: 0;
-      background: none; border: none; border-radius: 4px;
-      color: var(--text-muted); cursor: pointer;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .bm-ql-add:hover { background: var(--glass); color: var(--text); }
-    .bm-ql-empty { padding: 6px 10px; color: var(--text-muted); font-size: 11px; font-style: italic; }
 
     /* Notes toolbar */
     #notes-toolbar {
@@ -3261,7 +3178,7 @@
       <div id="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:4px;">
         <div id="public-ip" style="font-size:10px;letter-spacing:0.12em;color:rgba(255,255,255,0.35);text-transform:uppercase;"></div>
         <div style="display:flex;gap:8px;align-items:center;">
-        <button class="icon-btn" id="notes-btn" data-tip="Notes, Bookmarks & Kindling">
+        <button class="icon-btn" id="notes-btn" data-tip="Notes & Kindling">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -3397,28 +3314,6 @@
           · Copy URL · Edit · Delete</span></div>
       <div class="help-row"><span class="help-row-label">Icon mode</span><span class="help-row-desc">Grid icon button →
           compact favicon tiles; hover a tile for a floating action menu</span></div>
-      <div class="help-row"><span class="help-row-label">Also in Bookmarks tab</span><span class="help-row-desc">Quick
-          Links are mirrored at the top of the side-panel Bookmarks tab for quick edit/delete alongside your Chrome
-          bookmark tree</span></div>
-    </div>
-
-    <div class="help-section">
-      <div class="help-section-title">Bookmarks</div>
-      <p class="help-p">Open the notepad icon → Bookmarks tab. A traditional tree view of your Chrome bookmarks, with
-        your Quick Links pinned at the top. Edits sync live with Chrome's bookmark manager.</p>
-      <div class="help-row"><span class="help-row-label">Tree navigation</span><span class="help-row-desc">Click a
-          folder to expand/collapse; collapse state persists between tabs</span></div>
-      <div class="help-row"><span class="help-row-label">Search</span><span class="help-row-desc">Type in the search
-          box to filter across every folder</span></div>
-      <div class="help-row"><span class="help-row-label">Folder actions</span><span class="help-row-desc">Hover a
-          folder for + (new subfolder), edit (rename), delete. Root folders (Bookmarks Bar / Other / Mobile) only
-          allow new subfolder</span></div>
-      <div class="help-row"><span class="help-row-label">Bookmark actions</span><span class="help-row-desc">Hover a
-          link for edit / delete; click to navigate, middle-click for new tab</span></div>
-      <div class="help-row"><span class="help-row-label">Refresh</span><span class="help-row-desc">Refresh icon in the
-          toolbar re-reads the bookmark tree from Chrome</span></div>
-      <div class="help-row"><span class="help-row-label">Export</span><span class="help-row-desc">Export icon in the
-          toolbar → Markdown, Apple Notes, or plain text</span></div>
     </div>
 
     <div class="help-section">
@@ -3912,7 +3807,6 @@
     <div id="notes-header">
       <div class="notes-tabs">
         <button class="notes-tab active" data-tab="notes">Notes</button>
-        <button class="notes-tab" data-tab="bookmarks">Bookmarks</button>
         <button class="notes-tab" data-tab="saved">Kindling</button>
       </div>
       <button id="notes-theme-toggle" title="Toggle light/dark" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center;transition:color 0.2s;">
@@ -4009,35 +3903,6 @@
       </div>
     </div>
 
-    <!-- BOOKMARKS TAB -->
-    <div id="bookmarks-tab-content" class="notes-tab-pane">
-      <div id="bm-tree-toolbar" style="display:flex;gap:6px;padding:10px 20px 8px;align-items:center;flex-shrink:0;">
-        <input id="bm-tree-search" type="text" placeholder="Search bookmarks…"
-          style="flex:1;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;outline:none;font-family:'Inter',sans-serif;" />
-        <button id="bm-tree-refresh" class="icon-btn" title="Refresh"
-          style="width:28px;height:28px;padding:0;flex-shrink:0;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-        </button>
-        <button id="export-btn" class="icon-btn" title="Export links"
-          style="width:28px;height:28px;padding:0;flex-shrink:0;" data-tip="Export links">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-        </button>
-      </div>
-      <div id="bm-scroll" style="flex:1;overflow-y:auto;padding:4px 12px 12px;">
-        <div id="bm-quicklinks" class="bm-ql-wrap"></div>
-        <div id="bm-tree"></div>
-      </div>
-    </div>
-
     <!-- SAVED TAB -->
     <div id="saved-tab-content" class="notes-tab-pane">
       <div id="saved-add-row">
@@ -4131,56 +3996,6 @@
           </svg>
           Copy to Clipboard
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- BOOKMARK SYNC MODAL -->
-  <div id="bm-modal" style="display:none" class="modal-backdrop">
-    <div class="modal" style="width:480px">
-      <h2>Sync from Bookmarks</h2>
-      <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
-        Choose a bookmarks folder — all links inside will be synced to your Quick Links. They'll stay in sync each time
-        you open a new tab.
-      </p>
-
-      <div class="field">
-        <label>Select folder</label>
-        <select id="bm-folder-select"
-          style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);
-        border-radius:10px;padding:10px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;cursor:pointer;">
-          <option value="">Loading folders…</option>
-        </select>
-      </div>
-
-      <div id="bm-preview" style="display:none;margin-top:4px;margin-bottom:4px">
-        <div
-          style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;font-weight:500;">
-          Preview</div>
-        <div id="bm-preview-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
-        </div>
-      </div>
-
-      <div
-        style="margin-top:16px;padding:12px;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);line-height:1.6">
-        <strong style="color:var(--accent);">Auto-sync</strong> — when enabled, links are refreshed from this folder
-        each time you open a new tab.
-        <div style="margin-top:8px" class="toggle-row">
-          <span class="toggle-label" style="font-size:12px">Keep auto-syncing</span>
-          <button class="toggle" id="toggle-bm-autosync"></button>
-        </div>
-      </div>
-
-      <div id="bm-merge-row"
-        style="margin-top:12px;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;"
-        class="toggle-row">
-        <span class="toggle-label" style="font-size:12px">Merge with existing links (don't replace)</span>
-        <button class="toggle on" id="toggle-bm-merge"></button>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" id="bm-cancel">Cancel</button>
-        <button class="btn btn-primary" id="bm-apply">Sync Now</button>
       </div>
     </div>
   </div>
