@@ -49,6 +49,18 @@ Confirmed Asana's html_notes allowlist has no checkbox markup (kept existing tas
 
 ## Chores
 
+- [x] CHORE: move clear completed tasks by checklist item in toolbar for notes
+
+```RESULT:
+Moved clear completed button from NoteEditor toolbar to NoteTabBar. Editor exposes clearCompleted via forwardRef/useImperativeHandle — commit: c6e3e1b 2026.04.20 12:15:00
+```
+
+- [x] CHORE: main panel should not be covered when notes are expanded, it should be a split view
+
+```RESULT:
+Main content now aligns left with max-width constrained to remaining viewport when panel is open, preventing overlap — commit: f83d6be 2026.04.20 12:25:00
+```
+
 - [x] CHORE: wallpapers need to be able to be removed, also not showing up on main panel
 
 ```RESULT:

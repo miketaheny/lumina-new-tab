@@ -16,7 +16,7 @@ export default defineConfig({
     oauth2: {
       client_id: '603010888709-aedkplba5694rbacksisevfmges8mpak.apps.googleusercontent.com',
       scopes: [
-        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive',
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/userinfo.email',
       ],
