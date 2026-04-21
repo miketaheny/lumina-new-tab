@@ -86,6 +86,35 @@ document.getElementById('new-tag-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') addNewTag();
 });
 
+async function createRaindropFromPopup(link) {
+  try {
+    const result = await chrome.storage.local.get(['lumina_raindrop_token', 'lumina_raindrop_collection']);
+    const token = (result.lumina_raindrop_token || localStorage.getItem('lumina_raindrop_token') || '').trim();
+    const collectionId = result.lumina_raindrop_collection || JSON.parse(localStorage.getItem('lumina_raindrop_collection') || 'null');
+    if (!token || !collectionId) return;
+    const resp = await fetch('https://api.raindrop.io/rest/v1/raindrop', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        link: link.url,
+        title: link.title || '',
+        collection: { '$id': collectionId },
+        tags: link.tags || [],
+        important: true,
+      }),
+    });
+    if (resp.ok) {
+      const j = await resp.json();
+      if (j?.item?._id) {
+        link.raindropId = j.item._id;
+        link.id = 'sl-' + j.item._id;
+        link.lastUpdate = j.item.lastUpdate || new Date().toISOString();
+        chrome.storage.local.set({ lumina_saved: savedData });
+      }
+    }
+  } catch {}
+}
+
 document.getElementById('save-btn').addEventListener('click', () => {
   const url = document.getElementById('url').value.trim();
   let title = document.getElementById('title').value.trim();
@@ -110,6 +139,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
   chrome.storage.local.set({ lumina_saved: savedData }, () => {
     document.getElementById('toast').classList.add('show');
     document.getElementById('save-btn').disabled = true;
+    createRaindropFromPopup(link);
     setTimeout(() => window.close(), 1000);
   });
 });

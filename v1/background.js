@@ -1,7 +1,8 @@
-/* Lumina — background service worker: context menu + form auto-fill */
+/* Lumina — background service worker: context menu + form auto-fill + save to kindling */
 
 const STORAGE_KEY = 'lumina_address_book';
 const MENU_PARENT = 'lumina-autofill-parent';
+const MENU_SAVE_KINDLING = 'lumina-save-kindling';
 const CONTEXTS = ['all'];
 
 function buildContextMenu(entries) {
@@ -11,6 +12,12 @@ function buildContextMenu(entries) {
       title: 'Lumina: Add to Quick Links',
       contexts: ['page', 'link'],
     });
+    chrome.contextMenus.create({
+      id: MENU_SAVE_KINDLING,
+      title: 'Save to Kindling',
+      contexts: ['page', 'link'],
+    });
+
     chrome.contextMenus.create({
       id: MENU_PARENT,
       title: 'Lumina: Auto-fill form with',
@@ -97,6 +104,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
   if (!info.menuItemId || info.menuItemId === MENU_PARENT) return;
+
+  if (info.menuItemId === MENU_SAVE_KINDLING) {
+    const url = info.linkUrl || info.pageUrl || tab?.url || '';
+    const title = tab?.title || '';
+    if (!url) return;
+    saveToKindling(url, title);
+    return;
+  }
+
   if (info.menuItemId === 'lumina-autofill-empty') {
     chrome.tabs.create({ url: chrome.runtime.getURL('newtab.html') });
     return;
@@ -223,4 +239,57 @@ function fillFormWithEntry(entry) {
 
   const firstFilled = document.querySelector('[data-lumina-filled="1"]');
   if (firstFilled) firstFilled.focus();
+}
+
+async function saveToKindling(url, title) {
+  if (!title) {
+    try { title = new URL(url).hostname.replace(/^www\./, ''); }
+    catch { title = url; }
+  }
+
+  const link = {
+    id: 'sl-' + Date.now(),
+    url,
+    title,
+    tags: [],
+    savedAt: Date.now(),
+  };
+
+  const result = await chrome.storage.local.get('lumina_saved');
+  const savedData = result.lumina_saved || { links: [], tags: [] };
+  savedData.links.push(link);
+  await chrome.storage.local.set({ lumina_saved: savedData });
+
+  try {
+    const token = (await chrome.storage.local.get('lumina_raindrop_token')).lumina_raindrop_token;
+    const raw = (await chrome.storage.local.get('lumina_raindrop_collection')).lumina_raindrop_collection;
+    const collectionId = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!token || !collectionId) return;
+    const resp = await fetch('https://api.raindrop.io/rest/v1/raindrop', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        link: url,
+        title: title,
+        collection: { '$id': collectionId },
+        tags: [],
+        important: true,
+      }),
+    });
+    if (resp.ok) {
+      const j = await resp.json();
+      if (j?.item?._id) {
+        link.raindropId = j.item._id;
+        link.id = 'sl-' + j.item._id;
+        link.lastUpdate = j.item.lastUpdate || new Date().toISOString();
+        const freshResult = await chrome.storage.local.get('lumina_saved');
+        const freshData = freshResult.lumina_saved || savedData;
+        const idx = freshData.links.findIndex(l => l.url === url && !l.raindropId);
+        if (idx >= 0) {
+          freshData.links[idx] = link;
+          await chrome.storage.local.set({ lumina_saved: freshData });
+        }
+      }
+    }
+  } catch {}
 }

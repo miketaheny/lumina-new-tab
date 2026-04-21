@@ -3637,8 +3637,8 @@
           </div>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-section-title">Quick Links via Raindrop.io</div>
+        <div class="settings-section" style="margin-bottom:0">
+          <div class="settings-section-title">Raindrop.io Sync</div>
           <div style="background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text-muted);line-height:1.5;">
             <div style="font-weight:600;color:var(--text);margin-bottom:4px;">How to get a Test Token</div>
             <ol style="margin:0;padding-left:18px;">
@@ -3650,24 +3650,20 @@
           </div>
           <div class="field" style="margin-bottom:10px">
             <label>Test Token</label>
-            <input id="raindrop-token" type="password" placeholder="Paste your Raindrop.io test token" maxlength="200"
+            <input id="rd-token" type="password" placeholder="Paste your Raindrop.io test token" maxlength="200"
               style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--glass-border);border-radius:10px;padding:10px 13px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;" />
           </div>
-          <div class="field" style="margin-bottom:10px">
-            <label>Collection</label>
-            <div style="font-size:13px;color:var(--text-muted);padding:8px 0;"><span id="raindrop-collection-name">(not connected)</span></div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <button id="raindrop-connect-btn"
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <button id="rd-connect-btn"
               style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Connect</button>
-            <button id="raindrop-disconnect-btn"
+            <button id="rd-disconnect-btn"
               style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Disconnect</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="raindrop-sync-btn"
+            <button id="rd-sync-btn"
               style="flex:1;background:var(--glass);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:9px;padding:8px 12px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Sync Now</button>
-            <span id="raindrop-status"
-              style="font-size:11px;color:var(--text-muted);flex:1;text-align:right;line-height:1.4;"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
+            <div>Quick Links: <span id="rd-ql-status" style="color:var(--text);">(not connected)</span></div>
+            <div>Kindling: <span id="rd-kindling-status" style="color:var(--text);">(not connected)</span></div>
           </div>
         </div>
 
