@@ -39,6 +39,13 @@ const DEFAULT_STATE = {
 };
 
 let state = JSON.parse(localStorage.getItem('lumina_state') || 'null') || DEFAULT_STATE;
+if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  chrome.storage.local.get('lumina_state').then(r => {
+    if (r.lumina_state && !localStorage.getItem('lumina_state')) {
+      try { state = { ...state, ...JSON.parse(r.lumina_state) }; } catch {}
+    }
+  }).catch(() => {});
+}
 // Migrate single wallpaperTheme → wallpaperThemes array
 if (state.wallpaperTheme !== undefined) {
   state.wallpaperThemes = state.wallpaperTheme ? [state.wallpaperTheme] : [];
@@ -57,7 +64,11 @@ let bgTime = Math.random() * 10000;
 let archiveDebounceTimer = null;
 
 function saveState(opts) {
-  localStorage.setItem('lumina_state', JSON.stringify(state));
+  const json = JSON.stringify(state);
+  try { localStorage.setItem('lumina_state', json); } catch { /* quota — chrome.storage below */ }
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.set({ lumina_state: json }).catch(() => {});
+  }
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
@@ -3294,14 +3305,17 @@ function getSettingsArchive() {
 
 function archiveCurrentSettings() {
   const archive = getSettingsArchive();
+  const data = JSON.parse(JSON.stringify(state));
+  delete data.links;
+  delete data.addressBook;
   const snapshot = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     timestamp: Date.now(),
-    data: JSON.parse(JSON.stringify(state)),
+    data,
   };
   archive.unshift(snapshot);
   if (archive.length > MAX_SETTINGS_REVISIONS) archive.length = MAX_SETTINGS_REVISIONS;
-  localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive));
+  try { localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive)); } catch {}
 }
 
 function restoreSettingsRevision(revisionId) {
