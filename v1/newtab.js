@@ -583,6 +583,9 @@ function renderLinks() {
     });
   }
 
+  if (document.getElementById('quicklinks-tab-content')?.classList.contains('active')) {
+    renderSidePanelQuickLinks();
+  }
 }
 
 function svgFromString(str) {
@@ -1878,7 +1881,9 @@ document.querySelectorAll('.notes-tab').forEach(tab => {
     const which = tab.dataset.tab;
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
     document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
+    document.getElementById('quicklinks-tab-content').classList.toggle('active', which === 'quicklinks');
     document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
+    if (which === 'quicklinks') renderSidePanelQuickLinks();
   });
 });
 
@@ -2394,11 +2399,6 @@ function setRaindropCollectionId(id) {
   }
 }
 function isRaindropConfigured() { return !!(getRaindropToken() && getRaindropCollectionId()); }
-
-function setKindlingStatus(msg) {
-  const el = document.getElementById('raindrop-sync-status');
-  if (el) el.textContent = msg;
-}
 
 async function raindropApi(method, path, body) {
   const token = getRaindropToken();
@@ -3132,6 +3132,116 @@ function initQLSync() {
   }
 }
 
+function spQlMakeIcon(svg) {
+  return svgFromString(svg);
+}
+
+function spQlActionBtn(cls, title, svgStr, handler) {
+  const btn = document.createElement('button');
+  btn.className = cls;
+  btn.title = title;
+  btn.appendChild(spQlMakeIcon(svgStr));
+  btn.addEventListener('click', handler);
+  return btn;
+}
+
+function renderSidePanelQuickLinks() {
+  const list = document.getElementById('sp-ql-list');
+  if (!list) return;
+  list.textContent = '';
+
+  const links = state.links || [];
+  if (!links.length) {
+    const empty = document.createElement('div');
+    empty.id = 'sp-ql-empty';
+    const msg = document.createElement('span');
+    msg.textContent = 'No quick links yet.';
+    const hint = document.createElement('small');
+    hint.style.opacity = '0.6';
+    hint.textContent = 'Add links from the button above or from the main panel.';
+    empty.appendChild(msg);
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(hint);
+    list.appendChild(empty);
+    return;
+  }
+
+  const newtabSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  const editSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const deleteSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
+  links.forEach(link => {
+    const row = document.createElement('div');
+    row.className = 'sp-ql-item';
+    row.dataset.id = link.id;
+
+    const _letter = (link.label || '?')[0].toUpperCase();
+    if (link.icon && typeof HEROICONS !== 'undefined' && HEROICONS[link.icon]) {
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'sp-ql-favicon hero-icon';
+      iconDiv.appendChild(svgFromString(heroiconSvg(link.icon, 18)));
+      row.appendChild(iconDiv);
+    } else if (link.noFavicon) {
+      const fb = document.createElement('div');
+      fb.className = 'sp-ql-favicon fallback';
+      fb.textContent = _letter;
+      row.appendChild(fb);
+    } else if (link.favicon) {
+      const img = document.createElement('img');
+      img.className = 'sp-ql-favicon';
+      img.src = link.favicon;
+      img.alt = '';
+      const fb = document.createElement('div');
+      fb.className = 'sp-ql-favicon fallback';
+      fb.style.display = 'none';
+      fb.textContent = _letter;
+      img.addEventListener('error', () => { img.style.display = 'none'; fb.style.display = 'flex'; });
+      row.appendChild(img);
+      row.appendChild(fb);
+    } else {
+      const tmp = document.createElement('span');
+      const parsed = new DOMParser().parseFromString(faviconImgHtml(link.url, link.label, 'sp-ql-favicon'), 'text/html');
+      Array.from(parsed.body.childNodes).forEach(n => tmp.appendChild(document.importNode(n, true)));
+      while (tmp.firstChild) row.appendChild(tmp.firstChild);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'sp-ql-item-label';
+    label.textContent = link.label || getUrlLabel(link.url);
+    row.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'sp-ql-item-actions';
+    actions.appendChild(spQlActionBtn('sp-ql-newtab', 'Open in new tab', newtabSvg, e => { e.stopPropagation(); window.open(link.url, '_blank'); }));
+    actions.appendChild(spQlActionBtn('sp-ql-edit', 'Edit', editSvg, e => { e.stopPropagation(); openEditModal(link.id); }));
+    actions.appendChild(spQlActionBtn('sp-ql-delete delete', 'Delete', deleteSvg, e => { e.stopPropagation(); deleteLink(link.id); renderSidePanelQuickLinks(); }));
+    row.appendChild(actions);
+
+    row.addEventListener('click', e => {
+      if (e.target.closest('.sp-ql-item-actions')) return;
+      window.open(link.url, '_blank');
+    });
+
+    list.appendChild(row);
+  });
+}
+
+function initSidePanelQuickLinks() {
+  const addBtn = document.getElementById('sp-ql-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openAddModal());
+
+  const syncBtn = document.getElementById('sp-ql-sync-btn');
+  if (syncBtn) syncBtn.addEventListener('click', async () => {
+    if (isQLConfigured()) {
+      await qlPullSync();
+      renderSidePanelQuickLinks();
+    } else {
+      const statusEl = document.getElementById('sp-ql-status');
+      if (statusEl) statusEl.textContent = 'Connect Raindrop.io in Settings';
+    }
+  });
+}
+
 function initRaindropSettings() {
   const tokenInput = document.getElementById('rd-token');
   const connectBtn = document.getElementById('rd-connect-btn');
@@ -3399,10 +3509,11 @@ function init() {
   loadSavedLinks().then(() => {
     renderSavedFilters();
     renderSavedList();
-    initRaindropSync();
+    initKindlingSync();
   });
 
   initRaindropSettings();
+  initSidePanelQuickLinks();
   consumePendingQuickLinks();
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
