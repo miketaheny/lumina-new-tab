@@ -1,4 +1,3 @@
-// v2/packages/core/src/__tests__/storage.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { storage } from '../storage';

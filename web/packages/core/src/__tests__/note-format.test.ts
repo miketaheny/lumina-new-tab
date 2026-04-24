@@ -1,4 +1,3 @@
-// v2/packages/core/src/__tests__/note-format.test.ts
 import { describe, it, expect } from 'vitest';
 import { noteToMarkdown, markdownToNote } from '../note-format';
 import type { Note } from '../types';

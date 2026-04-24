@@ -1,4 +1,3 @@
-// v2/packages/core/src/types.ts
 
 // ─── Quick Links ────────────────────────────
 export interface QuickLink {

@@ -1,4 +1,3 @@
-// v2/packages/core/src/storage.ts
 import { openDB, type IDBPDatabase } from 'idb';
 import type {
   LuminaSettings, QuickLinksData, Note, KindlingData,
