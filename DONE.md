@@ -147,6 +147,12 @@ Added "Save to Kindling" and "Add to Quick Links" context menus to background se
 Consolidated address types, added full CRUD address book UI as Autofill tab in settings, syncs entries to chrome.storage.local for background context menus — commit: 3b6dd78 2026.04.20 00:20:00
 ```
 
+- [x] CHORE: Notes / Settings side panel should split with main window, not slide over, when open main panel gets smaller. let side panel drag width, save in settings (hidden).
+
+```RESULT:
+Converted side panel from position:fixed overlay to flex split layout with drag-to-resize handle. Width persists to panelWidth setting and syncs via Drive. Both web and extension updated — commit: e4e8fb7 2026.04.20 13:00:00
+```
+
 - [x] CHORE: update readme and user guide as needed based on changes
 
 ```RESULT:
@@ -184,6 +190,34 @@ Pinned tiptap caret range to ^2.27.2 (latest tested 2.x; 3.x deferred as breakin
 ```
 
 ## Refactors
+
+- [x] REFACTOR: remove asana sync completely from v1 extension
+
+```RESULT:
+Removed all Asana sync code from v1 (809 lines deleted): API functions, storage keys, markdown-HTML conversion, sync engine, settings UI, setup wizard, host permission — commit: e86217a 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/26
+```
+
+- [x] REFACTOR: remove bookmarks feature completely from v1 extension
+
+```RESULT:
+Removed all bookmarks code from v1 (750 lines deleted): chrome.bookmarks permission, Bookmarks tab, tree rendering, folder CRUD, bookmark sync modal, event listeners — commit: 390068d 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/25
+```
+
+- [x] REFACTOR: replace kindling save-for-later with raindrop.io two-way sync in v1 extension
+
+```RESULT:
+Replaced local-only Kindling storage with two-way Raindrop.io sync (~280 lines added): API client, pull/push sync engine, settings UI, token storage, popup and context menu integration. Read/unread maps to important field, tags sync bidirectionally — commit: 52580f0 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/24
+```
+
+- [x] REFACTOR: map quick links to raindrop.io quicklinks collection in v1 extension
+
+```RESULT:
+Quick Links now sync with a dedicated Raindrop.io collection (~300 lines added): API client, two-way sync on add/edit/delete/reorder, heroicon metadata stored in raindrop note field, context menu integration, pending link consumption from background script — commit: 8e2b9c7 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/23
+```
 
 - [x] DONE: replace notes editor that is custom with tiptap, enable all the options so i can decide what to use, if it doesn't have the clear strikethrough / completed checkboxes, redo that. leave and update copy md, apple notes buttons
 

@@ -28,9 +28,6 @@ const DEFAULT_STATE = {
   greetingCustom: false,
   greetingCustomText: '',
   panelTheme: 'dark',
-  bmFolderId: null,
-  bmAutoSync: false,
-  bmMerge: true,
   notesPanelOpen: true,
   qlIconsOnly: false,
   qlSections: [{ id: 'default', label: 'Quick Links' }],
@@ -38,10 +35,16 @@ const DEFAULT_STATE = {
   notes: null,
   activeNoteId: null,
   addressBook: [],
-  savedFaviconBg: 'white',
 };
 
 let state = JSON.parse(localStorage.getItem('lumina_state') || 'null') || DEFAULT_STATE;
+if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  chrome.storage.local.get('lumina_state').then(r => {
+    if (r.lumina_state && !localStorage.getItem('lumina_state')) {
+      try { state = { ...state, ...JSON.parse(r.lumina_state) }; } catch {}
+    }
+  }).catch(() => {});
+}
 // Migrate single wallpaperTheme → wallpaperThemes array
 if (state.wallpaperTheme !== undefined) {
   state.wallpaperThemes = state.wallpaperTheme ? [state.wallpaperTheme] : [];
@@ -60,7 +63,11 @@ let bgTime = Math.random() * 10000;
 let archiveDebounceTimer = null;
 
 function saveState(opts) {
-  localStorage.setItem('lumina_state', JSON.stringify(state));
+  const json = JSON.stringify(state);
+  try { localStorage.setItem('lumina_state', json); } catch { /* quota — chrome.storage below */ }
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.set({ lumina_state: json }).catch(() => {});
+  }
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
@@ -71,8 +78,6 @@ function saveState(opts) {
       if (typeof archiveCurrentSettings === 'function') archiveCurrentSettings();
     }, 30000);
   }
-  if (opts?.skipSchedule) return;
-  schedulePush();
 }
 
 // ─── BACKGROUND THEMES ───────────────────────────
@@ -507,9 +512,7 @@ function renderLinks() {
   grid.classList.toggle('icons-only', iconMode);
   document.getElementById('ql-icon-toggle').classList.toggle('on', iconMode);
 
-  // Bookmark-synced links are managed from the side-panel Bookmarks tab, not
-  // the main-panel quick-links list.
-  const visibleLinks = (state.links || []).filter(l => !l.fromBookmark);
+  const visibleLinks = state.links || [];
   if (!visibleLinks.length) {
     empty.style.display = 'block';
     return;
@@ -579,87 +582,13 @@ function renderLinks() {
     });
   }
 
-  renderSidePanelQuickLinks();
+  if (document.getElementById('quicklinks-tab-content')?.classList.contains('active')) {
+    renderSidePanelQuickLinks();
+  }
 }
 
 function svgFromString(str) {
   return new DOMParser().parseFromString(str, 'text/html').body.firstChild;
-}
-
-function renderSidePanelQuickLinks() {
-  const host = document.getElementById('bm-quicklinks');
-  if (!host) return;
-  const links = (state.links || []).filter(l => !l.fromBookmark);
-
-  host.replaceChildren();
-
-  const header = document.createElement('div');
-  header.className = 'bm-ql-header';
-  const title = document.createElement('span');
-  title.textContent = 'Quick Links';
-  const addBtn = document.createElement('button');
-  addBtn.className = 'bm-ql-add';
-  addBtn.title = 'Add link';
-  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
-  addBtn.addEventListener('click', () => openAddModal());
-  header.append(title, addBtn);
-  host.appendChild(header);
-
-  if (!links.length) {
-    const empty = document.createElement('div');
-    empty.className = 'bm-ql-empty';
-    empty.textContent = 'No quick links yet.';
-    host.appendChild(empty);
-    return;
-  }
-
-  links.forEach(link => {
-    const row = document.createElement('div');
-    row.className = 'bm-row';
-
-    const chev = document.createElement('span');
-    chev.className = 'bm-chevron empty';
-
-    const icon = document.createElement('span');
-    icon.className = 'bm-icon';
-    if (link.icon && HEROICONS[link.icon]) {
-      icon.style.color = 'var(--text-muted)';
-      icon.appendChild(svgFromString(heroiconSvg(link.icon, 14)));
-    } else {
-      const img = document.createElement('img');
-      img.alt = '';
-      img.src = link.favicon || getFaviconUrl(link.url) || '';
-      img.addEventListener('error', () => { img.style.display = 'none'; });
-      icon.appendChild(img);
-    }
-
-    const label = document.createElement('span');
-    label.className = 'bm-label';
-    label.textContent = link.label || getUrlLabel(link.url);
-    label.title = link.url;
-
-    const actions = document.createElement('span');
-    actions.className = 'bm-actions';
-    const editBtn = document.createElement('button');
-    editBtn.className = 'bm-act';
-    editBtn.title = 'Edit';
-    editBtn.appendChild(svgFromString(bmEditSvg()));
-    editBtn.addEventListener('click', e => { e.stopPropagation(); openEditModal(link.id); });
-    const delBtn = document.createElement('button');
-    delBtn.className = 'bm-act';
-    delBtn.title = 'Delete';
-    delBtn.appendChild(svgFromString(bmDeleteSvg()));
-    delBtn.addEventListener('click', e => { e.stopPropagation(); deleteLink(link.id); });
-    actions.append(editBtn, delBtn);
-
-    row.append(chev, icon, label, actions);
-    row.addEventListener('click', () => { window.location.href = link.url; });
-    row.addEventListener('auxclick', e => {
-      if (e.button === 1) { e.preventDefault(); window.open(link.url, '_blank'); }
-    });
-
-    host.appendChild(row);
-  });
 }
 
 // ─── ICON MODE FLOAT MENU ───────────────────────
@@ -741,8 +670,7 @@ function escHtml(s) {
 
 function deleteLink(id) {
   const link = state.links.find(l => l.id === id);
-  const chromeId = link?.bmId || (link?.fromBookmark && link?.id?.startsWith('bm-') ? link.id.slice(3) : null);
-  if (chromeId && chrome?.bookmarks) chrome.bookmarks.remove(chromeId).catch(() => {});
+  if (link?.raindropId) rdSyncOnDelete(link.raindropId);
   state.links = state.links.filter(l => l.id !== id);
   saveState(); renderLinks();
 }
@@ -781,6 +709,7 @@ function setupDrag(el) {
     state.links.splice(fromIdx, 1);
     state.links.splice(toIdx, 0, moved);
     saveState(); renderLinks();
+    rdSyncOnReorder();
   });
 }
 
@@ -857,9 +786,12 @@ document.getElementById('modal-save').addEventListener('click', async () => {
     if (link) {
       link.url = url; link.label = label; link.favicon = null; link.icon = _modalIconName || null;
       link.noFavicon = noFavicon || null; link.faviconBg = _modalFaviconBg !== 'white' ? _modalFaviconBg : null;
+      link.lastUpdate = Date.now();
+      rdSyncOnEdit(link);
     }
   } else {
-    const newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null };
+    let newLink = { id: 'ql-' + Date.now(), url, label, favicon: null, icon: _modalIconName || null, noFavicon: noFavicon || null, faviconBg: _modalFaviconBg !== 'white' ? _modalFaviconBg : null, lastUpdate: Date.now() };
+    newLink = await rdSyncOnAdd(newLink);
     state.links.push(newLink);
   }
 
@@ -1917,8 +1849,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     hideModal();
     hideExportModal();
-    hideBmModal();
-    closeSaveModal();
     closeSettingsPanel();
     closeNotesPanel();
     closeHelpPanel();
@@ -1949,260 +1879,10 @@ document.querySelectorAll('.notes-tab').forEach(tab => {
     const which = tab.dataset.tab;
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
     document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
-    document.getElementById('bookmarks-tab-content').classList.toggle('active', which === 'bookmarks');
-    document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
-    if (which === 'bookmarks') renderBookmarksTree();
+    document.getElementById('quicklinks-tab-content').classList.toggle('active', which === 'quicklinks');
+    if (which === 'quicklinks') renderSidePanelQuickLinks();
   });
 });
-
-// ─── BOOKMARKS TREE ──────────────────────────────────────────────────────────
-const BM_COLLAPSED_KEY = 'lumina_bm_collapsed';
-let bmCollapsed = new Set(JSON.parse(localStorage.getItem(BM_COLLAPSED_KEY) || '[]'));
-function bmSaveCollapsed() {
-  localStorage.setItem(BM_COLLAPSED_KEY, JSON.stringify([...bmCollapsed]));
-}
-
-function bmChevronSvg() {
-  return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-}
-function bmFolderSvg() {
-  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-}
-function bmEditSvg() {
-  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
-}
-function bmDeleteSvg() {
-  return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
-}
-
-function bmMakeFolderRow(node) {
-  const row = document.createElement('div');
-  row.className = 'bm-row';
-  const collapsed = bmCollapsed.has(node.id);
-  const hasChildren = (node.children || []).length > 0;
-  const chev = document.createElement('span');
-  chev.className = 'bm-chevron' + (collapsed ? ' collapsed' : '') + (hasChildren ? '' : ' empty');
-  chev.innerHTML = bmChevronSvg();
-  const icon = document.createElement('span');
-  icon.className = 'bm-icon';
-  icon.style.color = 'var(--text-muted)';
-  icon.innerHTML = bmFolderSvg();
-  const label = document.createElement('span');
-  label.className = 'bm-label bm-folder-label';
-  label.textContent = node.title || '(unnamed folder)';
-
-  const actions = document.createElement('span');
-  actions.className = 'bm-actions';
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'bm-act';
-  addBtn.title = 'New subfolder';
-  addBtn.appendChild(svgFromString('<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'));
-  addBtn.addEventListener('click', e => { e.stopPropagation(); bmCreateFolder(node.id); });
-  actions.appendChild(addBtn);
-
-  const isRoot = ['0', '1', '2', '3'].includes(node.id);
-  if (!isRoot) {
-    const editBtn = document.createElement('button');
-    editBtn.className = 'bm-act';
-    editBtn.title = 'Rename folder';
-    editBtn.appendChild(svgFromString(bmEditSvg()));
-    editBtn.addEventListener('click', e => { e.stopPropagation(); bmRenameFolder(node); });
-    const delBtn = document.createElement('button');
-    delBtn.className = 'bm-act';
-    delBtn.title = 'Delete folder';
-    delBtn.appendChild(svgFromString(bmDeleteSvg()));
-    delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteFolder(node); });
-    actions.append(editBtn, delBtn);
-  }
-
-  row.append(chev, icon, label, actions);
-  return { row, chev };
-}
-
-async function bmCreateFolder(parentId) {
-  const title = prompt('New folder name:');
-  if (!title) return;
-  try {
-    await chrome.bookmarks.create({ parentId, title });
-    if (parentId) bmCollapsed.delete(parentId);
-    bmSaveCollapsed();
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] create folder failed', e); }
-}
-
-async function bmRenameFolder(node) {
-  const title = prompt('Rename folder:', node.title || '');
-  if (title === null) return;
-  try {
-    await chrome.bookmarks.update(node.id, { title });
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] rename folder failed', e); }
-}
-
-async function bmDeleteFolder(node) {
-  const count = (node.children || []).length;
-  const msg = count
-    ? `Delete folder "${node.title}" and all ${count} items inside?`
-    : `Delete folder "${node.title}"?`;
-  if (!confirm(msg)) return;
-  try {
-    await chrome.bookmarks.removeTree(node.id);
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] delete folder failed', e); }
-}
-
-function bmMakeBookmarkRow(node) {
-  const row = document.createElement('div');
-  row.className = 'bm-row';
-  const chev = document.createElement('span');
-  chev.className = 'bm-chevron empty';
-  const icon = document.createElement('span');
-  icon.className = 'bm-icon';
-  const img = document.createElement('img');
-  img.alt = '';
-  img.src = getFaviconUrl(node.url) || '';
-  img.addEventListener('error', () => { img.style.display = 'none'; });
-  icon.appendChild(img);
-  const label = document.createElement('span');
-  label.className = 'bm-label';
-  label.textContent = node.title || node.url;
-  label.title = node.url;
-
-  const actions = document.createElement('span');
-  actions.className = 'bm-actions';
-  const editBtn = document.createElement('button');
-  editBtn.className = 'bm-act';
-  editBtn.title = 'Edit';
-  editBtn.innerHTML = bmEditSvg();
-  editBtn.addEventListener('click', e => { e.stopPropagation(); bmEditBookmark(node); });
-  const delBtn = document.createElement('button');
-  delBtn.className = 'bm-act';
-  delBtn.title = 'Delete';
-  delBtn.innerHTML = bmDeleteSvg();
-  delBtn.addEventListener('click', e => { e.stopPropagation(); bmDeleteBookmark(node); });
-  actions.append(editBtn, delBtn);
-
-  row.append(chev, icon, label, actions);
-  row.addEventListener('click', () => { window.location.href = node.url; });
-  row.addEventListener('auxclick', e => {
-    if (e.button === 1) { e.preventDefault(); window.open(node.url, '_blank'); }
-  });
-  return row;
-}
-
-function bmBuildNode(node) {
-  if (node.url) return bmMakeBookmarkRow(node);
-  const wrap = document.createElement('div');
-  wrap.className = 'bm-node';
-  const { row, chev } = bmMakeFolderRow(node);
-  const kids = document.createElement('div');
-  kids.className = 'bm-children' + (bmCollapsed.has(node.id) ? ' collapsed' : '');
-  (node.children || []).forEach(child => kids.appendChild(bmBuildNode(child)));
-  row.addEventListener('click', () => {
-    const isCollapsed = kids.classList.toggle('collapsed');
-    chev.classList.toggle('collapsed', isCollapsed);
-    if (isCollapsed) bmCollapsed.add(node.id); else bmCollapsed.delete(node.id);
-    bmSaveCollapsed();
-  });
-  wrap.append(row, kids);
-  return wrap;
-}
-
-function bmFilterTree(node, query) {
-  if (node.url) {
-    const hay = ((node.title || '') + ' ' + node.url).toLowerCase();
-    return hay.includes(query) ? { ...node } : null;
-  }
-  const kids = (node.children || []).map(c => bmFilterTree(c, query)).filter(Boolean);
-  if (!kids.length) return null;
-  return { ...node, children: kids };
-}
-
-async function bmEditBookmark(node) {
-  const newTitle = prompt('Edit bookmark title:', node.title || '');
-  if (newTitle === null) return;
-  const newUrl = prompt('Edit bookmark URL:', node.url || '');
-  if (newUrl === null) return;
-  try {
-    await chrome.bookmarks.update(node.id, { title: newTitle, url: newUrl });
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] edit failed', e); }
-}
-
-async function bmDeleteBookmark(node) {
-  if (!confirm(`Delete "${node.title || node.url}"?`)) return;
-  try {
-    await chrome.bookmarks.remove(node.id);
-    renderBookmarksTree();
-  } catch (e) { console.error('[bookmarks] delete failed', e); }
-}
-
-async function renderBookmarksTree() {
-  const host = document.getElementById('bm-tree');
-  if (!host) return;
-  if (!chrome?.bookmarks) {
-    host.innerHTML = '<div class="bm-empty">Bookmarks API not available.</div>';
-    return;
-  }
-  try {
-    const tree = await chrome.bookmarks.getTree();
-    const searchEl = document.getElementById('bm-tree-search');
-    const query = (searchEl?.value || '').trim().toLowerCase();
-    host.innerHTML = '';
-    const roots = tree[0]?.children || [];
-    const visible = query
-      ? roots.map(r => bmFilterTree(r, query)).filter(Boolean)
-      : roots;
-    if (!visible.length) {
-      host.innerHTML = '<div class="bm-empty">No bookmarks match.</div>';
-      return;
-    }
-    visible.forEach(root => {
-      const kids = (root.children || []);
-      if (!kids.length && !query) return;
-      const wrap = document.createElement('div');
-      wrap.className = 'bm-node';
-      const { row, chev } = bmMakeFolderRow(root);
-      const kidsEl = document.createElement('div');
-      kidsEl.className = 'bm-children' + (bmCollapsed.has(root.id) ? ' collapsed' : '');
-      kids.forEach(child => kidsEl.appendChild(bmBuildNode(child)));
-      row.addEventListener('click', () => {
-        const isCollapsed = kidsEl.classList.toggle('collapsed');
-        chev.classList.toggle('collapsed', isCollapsed);
-        if (isCollapsed) bmCollapsed.add(root.id); else bmCollapsed.delete(root.id);
-        bmSaveCollapsed();
-      });
-      wrap.append(row, kidsEl);
-      host.appendChild(wrap);
-    });
-  } catch (e) {
-    host.innerHTML = '<div class="bm-empty">Error loading bookmarks.</div>';
-    console.error('[bookmarks] tree render failed', e);
-  }
-}
-
-{
-  const search = document.getElementById('bm-tree-search');
-  const refresh = document.getElementById('bm-tree-refresh');
-  let searchTimer;
-  search?.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(renderBookmarksTree, 150);
-  });
-  refresh?.addEventListener('click', () => renderBookmarksTree());
-  if (chrome?.bookmarks) {
-    const refreshIfOpen = () => {
-      if (document.getElementById('bookmarks-tab-content')?.classList.contains('active')) {
-        renderBookmarksTree();
-      }
-    };
-    chrome.bookmarks.onCreated?.addListener(refreshIfOpen);
-    chrome.bookmarks.onRemoved?.addListener(refreshIfOpen);
-    chrome.bookmarks.onChanged?.addListener(refreshIfOpen);
-    chrome.bookmarks.onMoved?.addListener(refreshIfOpen);
-  }
-}
 
 // ── Tiptap notes editor ──────────────────────────────────────────────────────────────
 const notesSource = document.getElementById('notes-source');
@@ -2214,7 +1894,7 @@ let _notesReady = false; // guard: skip saves during initial setContent
   if (el && window.initTiptapEditor) {
     tiptapEditor = window.initTiptapEditor(el, {
       onChange: () => { saveNotes(); updateUndoBtn(); },
-      onSave:   () => { saveNotes(); flushSyncNow(); },
+      onSave:   () => { saveNotes(); },
     });
   }
 }
@@ -2267,7 +1947,7 @@ function saveNotes() {
       note.content = tiptapEditor.storage.markdown.getMarkdown();
     }
   }
-  saveState({ skipSchedule: true }); // only push to Asana on Cmd+S or tab close
+  saveState();
 }
 
 function renderNoteTabs() {
@@ -2398,7 +2078,6 @@ function deleteNote(id) {
   }
   saveState();
   renderNoteTabs();
-  if (deleted?.asanaTaskGid) handleNoteDeletion(deleted.asanaTaskGid);
 }
 
 function htmlToMarkdown(html) {
@@ -2468,7 +2147,6 @@ if (notesSource) notesSource.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     saveNotes();
-    flushSyncNow();
   }
 });
 
@@ -2634,7 +2312,7 @@ function hideExportModal() {
   setTimeout(() => { m.style.display = 'none'; }, 200);
 }
 
-document.getElementById('export-btn').addEventListener('click', openExportModal);
+document.getElementById('export-btn')?.addEventListener('click', openExportModal);
 document.getElementById('export-close').addEventListener('click', hideExportModal);
 document.getElementById('export-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('export-modal')) hideExportModal();
@@ -2662,1006 +2340,429 @@ document.getElementById('export-copy-btn').addEventListener('click', () => {
   });
 });
 
-// ─── BOOKMARK SYNC ───────────────────────────────
-let bmFolderContents = []; // preview cache
-
-function hideBmModal() {
-  const m = document.getElementById('bm-modal');
-  if (m.style.display === 'none') return;
-  m.classList.add('closing');
-  m.querySelector('.modal').classList.add('closing');
-  setTimeout(() => { m.style.display = 'none'; }, 200);
-}
-
-async function openBmModal() {
-  const m = document.getElementById('bm-modal');
-  m.style.display = 'flex';
-  m.classList.remove('closing');
-  m.querySelector('.modal').classList.remove('closing');
-
-  // Sync toggle state
-  const autoToggle = document.getElementById('toggle-bm-autosync');
-  autoToggle.classList.toggle('on', !!state.bmAutoSync);
-  autoToggle.onclick = () => {
-    state.bmAutoSync = !state.bmAutoSync;
-    autoToggle.classList.toggle('on', state.bmAutoSync);
-    saveState();
-  };
-  const mergeToggle = document.getElementById('toggle-bm-merge');
-  mergeToggle.classList.toggle('on', state.bmMerge !== false);
-  mergeToggle.onclick = () => {
-    state.bmMerge = !mergeToggle.classList.contains('on');
-    mergeToggle.classList.toggle('on', state.bmMerge);
-    saveState();
-  };
-
-  await loadBookmarkFolders();
-}
-
-async function loadBookmarkFolders() {
-  const sel = document.getElementById('bm-folder-select');
-  sel.innerHTML = '<option value="">Loading…</option>';
-
-  if (!chrome?.bookmarks) {
-    sel.innerHTML = '<option value="">Bookmarks API not available</option>';
-    return;
-  }
-
-  try {
-    const tree = await chrome.bookmarks.getTree();
-    const folders = [];
-
-    function walk(node, path) {
-      if (!node.url && node.id !== '0') { // it's a folder
-        if (node.id !== '0') folders.push({ id: node.id, label: path || node.title });
-      }
-      (node.children || []).forEach(child => {
-        const childPath = path ? `${path} / ${child.title}` : child.title;
-        walk(child, childPath);
-      });
-    }
-    tree.forEach(root => walk(root, ''));
-
-    sel.innerHTML = '<option value="">— Choose a folder —</option>';
-    folders.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.id;
-      opt.textContent = f.label;
-      if (state.bmFolderId === f.id) opt.selected = true;
-      sel.appendChild(opt);
-    });
-
-    if (state.bmFolderId) loadBmPreview(state.bmFolderId);
-  } catch (e) {
-    sel.innerHTML = '<option value="">Error loading bookmarks</option>';
+// ─── Raindrop.io API client ────────────��───────
+const RAINDROP_API = 'https://api.raindrop.io/rest/v1';
+function getRaindropToken() { return (localStorage.getItem('lumina_raindrop_token') || '').trim(); }
+function setRaindropToken(v) {
+  localStorage.setItem('lumina_raindrop_token', (v || '').trim());
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.set({ lumina_raindrop_token: (v || '').trim() }).catch(() => {});
   }
 }
-
-async function loadBmPreview(folderId) {
-  const previewWrap = document.getElementById('bm-preview');
-  const previewList = document.getElementById('bm-preview-list');
-  previewList.innerHTML = '';
-  bmFolderContents = [];
-
-  if (!folderId || !chrome?.bookmarks) { previewWrap.style.display = 'none'; return; }
-
-  try {
-    const children = await chrome.bookmarks.getChildren(folderId);
-    const directBookmarks = children.filter(c => c.url);
-    const subfolders = children.filter(c => !c.url);
-    bmFolderContents = directBookmarks;
-
-    if (!directBookmarks.length && !subfolders.length) {
-      previewWrap.style.display = 'none'; return;
-    }
-
-    previewWrap.style.display = 'block';
-
-    // Show direct bookmarks (up to 6)
-    directBookmarks.slice(0, 6).forEach(bm => {
-      const item = document.createElement('div');
-      item.className = 'bm-preview-item';
-      const faviconUrl = getFaviconGoogleUrl(bm.url);
-      item.innerHTML = `
-        ${faviconUrl ? `<img src="${faviconUrl}" alt="" onerror="this.style.display='none'"/>` : ''}
-        <span><strong style="color:var(--text)">${escHtml(bm.title || getUrlLabel(bm.url))}</strong> &mdash; ${escHtml(getUrlLabel(bm.url))}</span>
-      `;
-      previewList.appendChild(item);
-    });
-    if (directBookmarks.length > 6) {
-      const more = document.createElement('div');
-      more.className = 'bm-preview-item';
-      more.style.justifyContent = 'center';
-      more.innerHTML = `<span>+${directBookmarks.length - 6} more links</span>`;
-      previewList.appendChild(more);
-    }
-
-    // Show subfolders as section previews
-    if (subfolders.length) {
-      const divider = document.createElement('div');
-      divider.style.cssText = 'font-size:10px;color:var(--text-muted);padding:4px 0 2px;opacity:0.7;';
-      divider.textContent = `📁 ${subfolders.length} subfolder${subfolders.length > 1 ? 's' : ''} → each becomes a section`;
-      previewList.appendChild(divider);
-      subfolders.forEach(folder => {
-        const row = document.createElement('div');
-        row.className = 'bm-preview-item';
-        row.innerHTML = `<span>📁 <strong style="color:var(--text)">${escHtml(folder.title)}</strong></span>`;
-        previewList.appendChild(row);
-      });
-    }
-  } catch (e) {
-    previewWrap.style.display = 'none';
-  }
-}
-
-document.getElementById('bm-folder-select').addEventListener('change', e => {
-  loadBmPreview(e.target.value);
-});
-
-document.getElementById('bm-cancel').addEventListener('click', hideBmModal);
-document.getElementById('bm-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('bm-modal')) hideBmModal();
-});
-
-document.getElementById('bm-apply').addEventListener('click', async () => {
-  const folderId = document.getElementById('bm-folder-select').value;
-  if (!folderId) { showToast('Please select a folder first'); return; }
-
-  state.bmFolderId = folderId;
-  saveState();
-
-  const result = await applyBmSync();
-  hideBmModal();
-  if (result) {
-    const { linkCount, sectionCount } = result;
-    const sectionNote = sectionCount > 1 ? ` across ${sectionCount} sections` : '';
-    showToast(`✓ Synced ${linkCount} link${linkCount !== 1 ? 's' : ''}${sectionNote} from bookmarks`);
-  }
-});
-
-async function applyBmSync() {
-  if (!state.bmFolderId || !chrome?.bookmarks) return;
-  try {
-    const children = await chrome.bookmarks.getChildren(state.bmFolderId);
-    const [folderNode] = await chrome.bookmarks.get(state.bmFolderId);
-    const rootName = folderNode?.title || 'Bookmarks';
-
-    const newSections = [];
-    const newLinks = [];
-
-    // Direct bookmark children → section named after the root folder
-    const directBookmarks = children.filter(c => c.url);
-    if (directBookmarks.length) {
-      const sectionId = 'bms-' + state.bmFolderId;
-      newSections.push({ id: sectionId, label: rootName, fromBookmark: true });
-      directBookmarks.forEach(bm => newLinks.push({
-        id: 'bm-' + bm.id, url: bm.url,
-        label: bm.title || getUrlLabel(bm.url),
-        favicon: null, section: sectionId, fromBookmark: true,
-      }));
-    }
-
-    // Subfolders → one section each
-    const subfolders = children.filter(c => !c.url);
-    for (const folder of subfolders) {
-      const subChildren = await chrome.bookmarks.getChildren(folder.id);
-      const subBookmarks = subChildren.filter(c => c.url);
-      if (!subBookmarks.length) continue;
-      const sectionId = 'bms-' + folder.id;
-      newSections.push({ id: sectionId, label: folder.title, fromBookmark: true });
-      subBookmarks.forEach(bm => newLinks.push({
-        id: 'bm-' + bm.id, url: bm.url,
-        label: bm.title || getUrlLabel(bm.url),
-        favicon: null, section: sectionId, fromBookmark: true,
-      }));
-    }
-
-    // Preserve custom display settings from existing bookmark links
-    const existingById = new Map(state.links.map(l => [l.id, l]));
-    for (const link of newLinks) {
-      const existing = existingById.get(link.id);
-      if (existing?.icon) link.icon = existing.icon;
-      if (existing?.noFavicon) link.noFavicon = existing.noFavicon;
-      if (existing?.faviconBg) link.faviconBg = existing.faviconBg;
-    }
-
-    if (state.bmMerge !== false) {
-      const manualLinks = state.links.filter(l => !l.fromBookmark);
-      const manualSections = (state.qlSections || []).filter(s => !s.fromBookmark);
-      state.links = [...manualLinks, ...newLinks];
-      state.qlSections = [...manualSections, ...newSections];
-    } else {
-      state.links = newLinks;
-      state.qlSections = newSections.length ? newSections : [{ id: 'default', label: 'Quick Links' }];
-    }
-
-    if (!state.qlSections?.length) state.qlSections = [{ id: 'default', label: 'Quick Links' }];
-
-    saveState();
-    renderLinks();
-    return { linkCount: newLinks.length, sectionCount: newSections.length };
-  } catch(e) {
-    console.warn('Bookmark sync failed', e);
-  }
-}
-
-// ─── SAVED LINKS ──────────────────────────────────
-const TAG_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e',
-  '#14b8a6', '#3b82f6', '#a78bfa', '#ec4899',
-];
-
-let savedData = { links: [], tags: [] };
-let savedFilter = 'all';
-let savedSort = 'date'; // 'date' | 'title'
-let selectedTagsForSave = [];
-let selectedTagColor = TAG_COLORS[6];
-let editingLinkId = null;
-
-async function loadSavedLinks() {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try {
-      const result = await chrome.storage.local.get('lumina_saved');
-      if (result.lumina_saved) savedData = result.lumina_saved;
-      return;
-    } catch (e) { /* fall through */ }
-  }
-  const raw = localStorage.getItem('lumina_saved');
-  if (raw) try { savedData = JSON.parse(raw); } catch (e) {}
-}
-
-async function persistSavedLinks() {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try { await chrome.storage.local.set({ lumina_saved: savedData }); }
-    catch (e) { localStorage.setItem('lumina_saved', JSON.stringify(savedData)); }
-  } else {
-    localStorage.setItem('lumina_saved', JSON.stringify(savedData));
-  }
-  schedulePush();
-}
-
-const SAVED_FAVICON_BG = {
-  white:       'rgba(255,255,255,0.92)',
-  dark:        'rgba(20,15,40,0.75)',
-  transparent: 'transparent',
-};
-
-function applySavedFaviconBg(val) {
-  val = val || 'white';
-  state.savedFaviconBg = val;
-  document.documentElement.style.setProperty('--saved-favicon-bg', SAVED_FAVICON_BG[val] || SAVED_FAVICON_BG.white);
-  document.querySelectorAll('.fav-bg-btn').forEach(b => b.classList.toggle('active', b.dataset.bg === val));
-}
-
-let savedStatusFilter = 'all'; // 'all' | 'unread' | 'read'
-
-function makeStatusChip(label, value) {
-  const chip = document.createElement('button');
-  chip.className = 'saved-filter-chip';
-  chip.textContent = label;
-  if (savedStatusFilter === value) {
-    chip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
-  }
-  chip.addEventListener('click', () => {
-    savedStatusFilter = value;
-    renderSavedFilters();
-    renderSavedList();
-  });
-  return chip;
-}
-
-function renderSavedFilters() {
-  const container = document.getElementById('saved-filters');
-  container.innerHTML = '';
-
-  container.appendChild(makeStatusChip('All', 'all'));
-  container.appendChild(makeStatusChip('Unread', 'unread'));
-  container.appendChild(makeStatusChip('Read', 'read'));
-
-  const sep = document.createElement('span');
-  sep.style.cssText = 'width:1px;height:14px;background:var(--glass-border);margin:0 2px;align-self:center;flex-shrink:0;';
-  container.appendChild(sep);
-
-  const allChip = document.createElement('button');
-  allChip.className = 'saved-filter-chip';
-  allChip.textContent = 'All tags';
-  if (savedFilter === 'all') {
-    allChip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
-  }
-  allChip.addEventListener('click', () => { savedFilter = 'all'; renderSavedFilters(); renderSavedList(); });
-  container.appendChild(allChip);
-
-  savedData.tags.forEach(tag => {
-    const chip = document.createElement('button');
-    chip.className = 'saved-filter-chip';
-    if (savedFilter === tag.name) {
-      chip.style.cssText = `background:${tag.color}33;border-color:${tag.color}88;color:${tag.color}`;
-    }
-    const dot = document.createElement('span');
-    dot.style.cssText = `width:7px;height:7px;border-radius:50%;background:${tag.color};flex-shrink:0`;
-    chip.appendChild(dot);
-    chip.appendChild(document.createTextNode(tag.name));
-    chip.addEventListener('click', () => {
-      savedFilter = (savedFilter === tag.name) ? 'all' : tag.name;
-      renderSavedFilters();
-      renderSavedList();
-    });
-    container.appendChild(chip);
-  });
-}
-
-function renderSavedList() {
-  const list = document.getElementById('saved-list');
-  list.innerHTML = '';
-
-  let links = savedData.links;
-  if (savedFilter !== 'all') {
-    links = links.filter(l => l.tags && l.tags.includes(savedFilter));
-  }
-  if (savedStatusFilter === 'unread') {
-    links = links.filter(l => !l.readAt);
-  } else if (savedStatusFilter === 'read') {
-    links = links.filter(l => !!l.readAt);
-  }
-
-  if (!links.length) {
-    const empty = document.createElement('div');
-    empty.id = 'saved-empty';
-    if (savedFilter === 'all' && savedStatusFilter === 'all') {
-      empty.innerHTML = "Kindling is empty.<br><small style=\"opacity:0.6\">Use the bookmark button in any tab to stash from anywhere.</small>";
-    } else if (savedStatusFilter !== 'all' && savedFilter === 'all') {
-      empty.innerHTML = `Nothing ${escHtml(savedStatusFilter)} yet.`;
-    } else {
-      empty.innerHTML = `No links tagged <strong>${escHtml(savedFilter)}</strong>.`;
-    }
-    list.appendChild(empty);
-    return;
-  }
-
-  const sorted = [...links].sort((a, b) => savedSort === 'title'
-    ? (a.title || '').localeCompare(b.title || '')
-    : (b.savedAt || 0) - (a.savedAt || 0));
-
-  sorted.forEach((link, idx) => {
-    const item = document.createElement('a');
-    item.className = 'saved-item' + (link.readAt ? ' is-read' : '');
-    item.href = link.url;
-    item.target = '_blank';
-    item.rel = 'noopener';
-    item.style.animationDelay = `${idx * 0.03}s`;
-
-    const savedFaviconHtml = faviconImgHtml(link.url, link.title, 'saved-item-favicon');
-    const tagsHtml = (link.tags || []).map(tagName => {
-      const tag = savedData.tags.find(t => t.name === tagName);
-      const color = tag ? tag.color : '#a78bfa';
-      return `<span class="saved-tag-chip" style="background:${color}22;color:${color};border-color:${color}44">${escHtml(tagName)}</span>`;
-    }).join('');
-
-    item.innerHTML = `
-      ${savedFaviconHtml}
-      <div class="saved-item-info">
-        <div class="saved-item-title">${escHtml(link.title || getUrlLabel(link.url))}</div>
-        <div class="saved-item-domain">${escHtml(getUrlLabel(link.url))}</div>
-        ${tagsHtml ? `<div class="saved-item-tags">${tagsHtml}</div>` : ''}
-      </div>
-      <div class="saved-item-actions">
-        <button class="saved-item-read" title="${link.readAt ? 'Mark unread' : 'Mark read'}">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="${link.readAt ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </button>
-        <button class="saved-item-edit" title="Edit tags">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </button>
-        <button class="saved-item-copy" title="Copy URL">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button class="saved-item-delete" title="Remove">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        </button>
-      </div>
-    `;
-
-    item.querySelector('.saved-item-read').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const target = savedData.links.find(l => l.id === link.id);
-      if (!target) return;
-      target.readAt = target.readAt ? null : Date.now();
-      persistSavedLinks();
-      renderSavedList();
-    });
-    item.querySelector('.saved-item-edit').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      openSaveModal({ id: link.id, url: link.url, title: link.title, tags: link.tags });
-    });
-    item.querySelector('.saved-item-copy').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      navigator.clipboard.writeText(link.url).then(() => showCopyToast());
-    });
-    item.querySelector('.saved-item-delete').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      savedData.links = savedData.links.filter(l => l.id !== link.id);
-      persistSavedLinks();
-      renderSavedList();
-    });
-
-    list.appendChild(item);
-  });
-}
-
-// ── Save link modal ──────────────────────────────
-function openSaveModal(prefill = {}) {
-  editingLinkId = prefill.id || null;
-  selectedTagsForSave = Array.isArray(prefill.tags) ? [...prefill.tags] : [];
-  selectedTagColor = TAG_COLORS[6];
-  document.getElementById('saved-modal-url').value = prefill.url || '';
-  document.getElementById('saved-modal-title').value = prefill.title || '';
-  document.getElementById('saved-modal-heading').textContent = editingLinkId ? 'Edit Link' : 'Save Link';
-  document.getElementById('saved-modal-save').textContent = editingLinkId ? 'Save Changes' : 'Save Link';
-  renderSaveTagSelector();
-
-  const m = document.getElementById('saved-modal');
-  m.style.display = 'flex';
-  m.classList.remove('closing');
-  m.querySelector('.modal').classList.remove('closing');
-  setTimeout(() => {
-    const urlEl = document.getElementById('saved-modal-url');
-    (urlEl.value ? document.getElementById('saved-modal-title') : urlEl).focus();
-  }, 50);
-}
-
-function closeSaveModal() {
-  const m = document.getElementById('saved-modal');
-  m.classList.add('closing');
-  m.querySelector('.modal').classList.add('closing');
-  setTimeout(() => { m.style.display = 'none'; }, 200);
-  editingLinkId = null;
-}
-
-function renderSaveTagSelector() {
-  const tagList = document.getElementById('saved-tag-list');
-  tagList.innerHTML = '';
-  savedData.tags.forEach(tag => {
-    const btn = document.createElement('button');
-    btn.className = 'tag-toggle' + (selectedTagsForSave.includes(tag.name) ? ' selected' : '');
-    btn.style.cssText = `background:${tag.color}22;color:${tag.color};border-color:${tag.color}66`;
-    btn.textContent = tag.name;
-    btn.type = 'button';
-    btn.addEventListener('click', () => {
-      const idx = selectedTagsForSave.indexOf(tag.name);
-      if (idx >= 0) selectedTagsForSave.splice(idx, 1);
-      else selectedTagsForSave.push(tag.name);
-      renderSaveTagSelector();
-    });
-    tagList.appendChild(btn);
-  });
-
-  const swatchRow = document.getElementById('saved-tag-colors');
-  swatchRow.innerHTML = '';
-  TAG_COLORS.forEach(color => {
-    const swatch = document.createElement('button');
-    swatch.className = 'tag-color-swatch' + (selectedTagColor === color ? ' selected' : '');
-    swatch.style.background = color;
-    swatch.type = 'button';
-    swatch.addEventListener('click', () => { selectedTagColor = color; renderSaveTagSelector(); });
-    swatchRow.appendChild(swatch);
-  });
-}
-
-function addSaveTag() {
-  const input = document.getElementById('saved-new-tag-input');
-  const name = input.value.trim();
-  if (!name) return;
-  if (!savedData.tags.find(t => t.name === name)) {
-    savedData.tags.push({ name, color: selectedTagColor });
-  }
-  if (!selectedTagsForSave.includes(name)) selectedTagsForSave.push(name);
-  input.value = '';
-  renderSaveTagSelector();
-  renderSavedFilters();
-}
-
-document.getElementById('saved-add-btn').addEventListener('click', () => openSaveModal());
-
-document.querySelectorAll('.saved-sort-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    savedSort = btn.dataset.sort;
-    document.querySelectorAll('.saved-sort-btn').forEach(b => {
-      const active = b.dataset.sort === savedSort;
-      b.style.background = active ? 'rgba(167,139,250,0.15)' : 'var(--glass)';
-      b.style.borderColor = active ? 'rgba(167,139,250,0.3)' : 'var(--glass-border)';
-      b.style.color = active ? 'var(--text)' : 'var(--text-muted)';
-    });
-    renderSavedList();
-  });
-});
-
-document.querySelectorAll('.fav-bg-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applySavedFaviconBg(btn.dataset.bg);
-    saveState();
-  });
-});
-document.getElementById('saved-modal-cancel').addEventListener('click', closeSaveModal);
-document.getElementById('saved-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('saved-modal')) closeSaveModal();
-});
-document.getElementById('saved-new-tag-add').addEventListener('click', addSaveTag);
-document.getElementById('saved-new-tag-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); addSaveTag(); }
-});
-
-document.getElementById('saved-modal-save').addEventListener('click', async () => {
-  let url = document.getElementById('saved-modal-url').value.trim();
-  let title = document.getElementById('saved-modal-title').value.trim();
-  if (!url) { showToast('Please enter a URL'); return; }
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  if (!title) title = getUrlLabel(url);
-
-  if (editingLinkId) {
-    const link = savedData.links.find(l => l.id === editingLinkId);
-    if (link) {
-      link.url = url;
-      link.title = title;
-      link.tags = [...selectedTagsForSave];
-    }
-  } else {
-    savedData.links.push({
-      id: 'sl-' + Date.now(),
-      url, title,
-      tags: [...selectedTagsForSave],
-      savedAt: Date.now(),
-    });
-  }
-  const wasEdit = !!editingLinkId;
-  await persistSavedLinks();
-  closeSaveModal();
-  renderSavedFilters();
-  renderSavedList();
-  showToast(wasEdit ? '✓ Link updated' : '✓ Link saved');
-});
-
-// Listen for popup saves
-if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.lumina_saved) {
-      savedData = changes.lumina_saved.newValue || { links: [], tags: [] };
-      renderSavedFilters();
-      renderSavedList();
-    }
-  });
-}
-
-// ─── INIT ────────────────────────────────────────
-// ─── ASANA SYNC (private project, task per note) ─────────────────
-const ASANA_API = 'https://app.asana.com/api/1.0';
-const ASANA_PROJECT_NAME = 'Lumina Notes';
-let syncDebounceTimer = null;
-let syncInProgress = false;
-let lastPullTime = 0;
-
-function getAsanaPat() { return (localStorage.getItem('lumina_asana_pat') || '').trim(); }
-function setAsanaPat(v) { localStorage.setItem('lumina_asana_pat', (v || '').trim()); }
-function getAsanaWorkspace() {
-  try { return JSON.parse(localStorage.getItem('lumina_asana_workspace') || 'null'); } catch { return null; }
-}
-function setAsanaWorkspace(ws) { localStorage.setItem('lumina_asana_workspace', JSON.stringify(ws || null)); }
-function getAsanaProject() {
-  try { return JSON.parse(localStorage.getItem('lumina_asana_project') || 'null'); } catch { return null; }
-}
-function setAsanaProject(p) { localStorage.setItem('lumina_asana_project', JSON.stringify(p || null)); }
-function isSyncConfigured() {
-  return !!(getAsanaPat() && getAsanaWorkspace()?.gid && getAsanaProject()?.gid);
-}
-
-function getAsanaModifiedMap() {
-  try { return JSON.parse(localStorage.getItem('lumina_asana_modified') || '{}'); } catch { return {}; }
-}
-function saveAsanaModifiedMap(m) { localStorage.setItem('lumina_asana_modified', JSON.stringify(m)); }
-function setAsanaModified(taskGid, iso) {
-  const m = getAsanaModifiedMap(); m[taskGid] = iso; saveAsanaModifiedMap(m);
-}
-
-function setSyncStatus(msg) {
-  const el = document.getElementById('sync-status');
-  if (el) el.textContent = msg;
-  setSyncBarText(msg);
-}
-
-function setSyncBar(state, msg) {
-  const bar = document.getElementById('sync-status-bar');
-  if (!bar) return;
-  bar.className = state; // 'connected', 'disconnected', 'syncing', or ''
-  const textEl = document.getElementById('sync-status-text');
-  if (textEl && msg) textEl.textContent = msg;
-}
-function setSyncBarText(msg) {
-  const textEl = document.getElementById('sync-status-text');
-  if (textEl && msg) textEl.textContent = msg;
-}
-
-async function asanaApi(path, opts = {}) {
-  const pat = getAsanaPat();
-  if (!pat) throw new Error('No Asana token configured');
+async function raindropApi(method, path, body) {
+  const token = getRaindropToken();
+  if (!token) throw new Error('No Raindrop.io token configured');
   const headers = {
-    Authorization: `Bearer ${pat}`,
+    Authorization: `Bearer ${token}`,
     Accept: 'application/json',
-    ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(opts.headers || {}),
+    ...(body ? { 'Content-Type': 'application/json' } : {}),
   };
-  const url = path.startsWith('http') ? path : `${ASANA_API}${path}`;
-  const resp = await fetch(url, { ...opts, headers });
+  const url = `${RAINDROP_API}${path}`;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(url, opts);
   if (!resp.ok) {
     let detail = '';
-    try { const j = await resp.json(); detail = j?.errors?.[0]?.message || ''; } catch {}
-    throw new Error(`Asana ${resp.status}${detail ? `: ${detail}` : ''}`);
+    try { const j = await resp.json(); detail = j?.errorMessage || ''; } catch {}
+    throw new Error(`Raindrop ${resp.status}${detail ? `: ${detail}` : ''}`);
   }
   if (resp.status === 204) return null;
   return resp.json();
 }
 
-async function asanaMe() {
-  const j = await asanaApi('/users/me?opt_fields=gid,name,workspaces.gid,workspaces.name');
-  return j?.data || null;
+async function rdGetCollections() {
+  const j = await raindropApi('GET', '/collections');
+  return j?.items || [];
 }
 
-async function asanaListProjects(workspaceGid) {
-  const j = await asanaApi(`/projects?workspace=${encodeURIComponent(workspaceGid)}&archived=false&opt_fields=gid,name,privacy_setting,owner.gid&limit=100`);
-  return j?.data || [];
+async function rdCreateCollection(title) {
+  const j = await raindropApi('POST', '/collection', { title });
+  return j?.item || null;
 }
 
-async function asanaCreatePrivateProject(workspaceGid, name) {
-  const body = JSON.stringify({ data: { name, workspace: workspaceGid, privacy_setting: 'private' } });
-  const j = await asanaApi('/projects', { method: 'POST', body });
-  return j?.data || null;
+async function rdGetRaindrops(collectionId, page, perpage) {
+  const j = await raindropApi('GET', `/raindrops/${collectionId}?page=${page}&perpage=${perpage}&sort=-created`);
+  return { items: j?.items || [], count: j?.count || 0 };
 }
 
-async function asanaListTasks(projectGid) {
-  const fields = 'gid,name,notes,html_notes,completed,modified_at';
-  const j = await asanaApi(`/projects/${encodeURIComponent(projectGid)}/tasks?completed_since=now&opt_fields=${fields}&limit=100`);
-  return j?.data || [];
-}
-
-async function asanaGetTask(taskGid) {
-  const fields = 'gid,name,notes,html_notes,completed,modified_at';
-  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}?opt_fields=${fields}`);
-  return j?.data || null;
-}
-
-async function asanaCreateTask(projectGid, workspaceGid, name, htmlNotes) {
-  const body = JSON.stringify({ data: { name, html_notes: htmlNotes, workspace: workspaceGid, projects: [projectGid] } });
-  const j = await asanaApi('/tasks', { method: 'POST', body });
-  return j?.data || null;
-}
-
-async function asanaUpdateTask(taskGid, fields) {
-  const body = JSON.stringify({ data: fields });
-  const j = await asanaApi(`/tasks/${encodeURIComponent(taskGid)}`, { method: 'PUT', body });
-  return j?.data || null;
-}
-
-async function asanaCompleteTask(taskGid) {
-  return asanaUpdateTask(taskGid, { completed: true });
-}
-
-// ─── Markdown ↔ Asana HTML subset ─────────────────
-// Asana's html_notes supports: <body>, <h1>, <h2>, <ol>, <ul>, <li>, <em>, <strong>,
-// <u>, <s>, <code>, <pre>, <a>, <hr>. Anything else is rejected.
-function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-function renderInline(text) {
-  let s = escapeHtml(text);
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => `<a href="${href}">${label}</a>`);
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-  s = s.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-  return s;
-}
-function markdownToAsanaHtml(md) {
-  const src = (md ?? '').toString();
-  const lines = src.split(/\r?\n/);
-  const out = [];
-  let listType = null; // 'ul' | 'ol'
-  let inFence = false;
-  let fenceBuf = [];
-  const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
-  const closeFence = () => {
-    if (!inFence) return;
-    out.push('<pre><code>' + escapeHtml(fenceBuf.join('\n')) + '</code></pre>');
-    fenceBuf = [];
-    inFence = false;
-  };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (/^```/.test(line.trim())) {
-      if (inFence) { closeFence(); } else { closeList(); inFence = true; }
-      continue;
-    }
-    if (inFence) { fenceBuf.push(raw); continue; }
-    if (!line.trim()) { closeList(); continue; }
-    if (/^(---+|\*\*\*+|___+)\s*$/.test(line.trim())) { closeList(); out.push('<hr/>'); continue; }
-    const h = line.match(/^(#{1,2})\s+(.*)$/);
-    if (h) { closeList(); out.push(`<${h[1].length === 1 ? 'h1' : 'h2'}>${renderInline(h[2])}</${h[1].length === 1 ? 'h1' : 'h2'}>`); continue; }
-    const task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
-    if (task) {
-      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
-      if (task[1].toLowerCase() === 'x') {
-        out.push(`<li><s>${renderInline(task[2])}</s></li>`);
-      } else {
-        out.push(`<li>[ ] ${renderInline(task[2])}</li>`);
-      }
-      continue;
-    }
-    const ul = line.match(/^\s*[-*]\s+(.*)$/);
-    if (ul) {
-      if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
-      out.push(`<li>${renderInline(ul[1])}</li>`);
-      continue;
-    }
-    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
-    if (ol) {
-      if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
-      out.push(`<li>${renderInline(ol[1])}</li>`);
-      continue;
-    }
-    closeList();
-    out.push(renderInline(line));
+async function rdGetAllRaindrops(collectionId) {
+  const all = [];
+  let page = 0;
+  const perpage = 50;
+  while (true) {
+    const { items, count } = await rdGetRaindrops(collectionId, page, perpage);
+    all.push(...items);
+    if (all.length >= count || items.length < perpage) break;
+    page++;
   }
-  closeFence();
-  closeList();
-  return `<body>${out.join('')}</body>`;
+  return all;
 }
 
-function asanaHtmlToMarkdown(html) {
-  if (!html) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  // An <li> is treated as a checked task when its only significant child is a
-  // single <s> element — this is how markdownToAsanaHtml encodes `- [x]` items,
-  // since Asana's html_notes allowlist has no checkbox markup.
-  const liStrikeChild = (li) => {
-    let strike = null;
-    for (const n of li.childNodes) {
-      if (n.nodeType === 3) { if (n.textContent.trim()) return null; continue; }
-      if (n.nodeType !== 1) continue;
-      if (n.tagName.toLowerCase() !== 's' || strike) return null;
-      strike = n;
-    }
-    return strike;
-  };
-  const walk = (node) => {
-    let md = '';
-    for (const child of node.childNodes) {
-      if (child.nodeType === 3) { md += child.textContent; continue; }
-      if (child.nodeType !== 1) continue;
-      const tag = child.tagName.toLowerCase();
-      const inner = walk(child);
-      switch (tag) {
-        case 'body': md += inner; break;
-        case 'h1': md += `\n# ${inner}\n`; break;
-        case 'h2': md += `\n## ${inner}\n`; break;
-        case 'strong': case 'b': md += `**${inner}**`; break;
-        case 'em': case 'i': md += `*${inner}*`; break;
-        case 's': case 'strike': case 'del': md += `~~${inner}~~`; break;
-        case 'code':
-          if (child.parentElement?.tagName?.toLowerCase() === 'pre') { md += inner; }
-          else { md += `\`${inner}\``; }
-          break;
-        case 'pre': md += `\n\`\`\`\n${inner}\n\`\`\`\n`; break;
-        case 'u': md += `<u>${inner}</u>`; break;
-        case 'a': md += `[${inner}](${child.getAttribute('href') || ''})`; break;
-        case 'ul': {
-          const items = Array.from(child.children);
-          const strikes = items.map(liStrikeChild);
-          const hasUnchecked = items.map(li => li.textContent.startsWith('[ ] '));
-          const isTaskList = strikes.some(Boolean) || hasUnchecked.some(Boolean);
-          if (isTaskList) {
-            md += '\n' + items.map((li, i) => {
-              if (strikes[i]) return `- [x] ${walk(strikes[i])}`;
-              const content = walk(li);
-              if (hasUnchecked[i]) return `- [ ] ${content.startsWith('[ ] ') ? content.slice(4) : content}`;
-              return `- [ ] ${content}`;
-            }).join('\n') + '\n';
-          } else {
-            md += '\n' + items.map(li => `- ${walk(li)}`).join('\n') + '\n';
-          }
-          break;
-        }
-        case 'ol': md += '\n' + Array.from(child.children).map((li, i) => `${i + 1}. ${walk(li)}`).join('\n') + '\n'; break;
-        case 'li': md += inner; break;
-        case 'br': md += '\n'; break;
-        case 'hr': md += '\n---\n'; break;
-        default: md += inner;
-      }
-    }
-    return md;
-  };
-  return walk(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+async function rdCreateRaindrop(data) {
+  const j = await raindropApi('POST', '/raindrop', data);
+  return j?.item || null;
 }
 
-// ─── Sync engine ─────────────────
-async function pushSync() {
-  if (!isSyncConfigured()) return;
-  if (syncInProgress) return;
-  syncInProgress = true;
-  setSyncBar('syncing', 'Pushing to Asana…');
+async function rdUpdateRaindrop(id, data) {
+  const j = await raindropApi('PUT', `/raindrop/${id}`, data);
+  return j?.item || null;
+}
+
+async function rdDeleteRaindrop(id) {
+  return raindropApi('DELETE', `/raindrop/${id}`);
+}
+
+// Listen for pending quick links from context menu
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.lumina_pending_quicklinks) {
+      consumePendingQuickLinks();
+    }
+  });
+}
+
+// ─── RAINDROP.IO QUICK LINKS SYNC ───────────────
+const QL_COLLECTION_NAME = 'Quick Links';
+let qlSyncInProgress = false;
+function getQLCollectionId() { const v = localStorage.getItem('lumina_raindrop_ql_collection_id'); return v ? Number(v) : null; }
+function setQLCollectionId(id) { localStorage.setItem('lumina_raindrop_ql_collection_id', id != null ? String(id) : ''); if (typeof chrome !== 'undefined' && chrome.storage?.local) chrome.storage.local.set({ lumina_raindrop_ql_collection_id: id != null ? Number(id) : null }).catch(() => {}); }
+function isQLConfigured() { return !!(getRaindropToken() && getQLCollectionId()); }
+function setQLStatus(msg) { const el = document.getElementById('rd-ql-status'); if (el) el.textContent = msg; }
+async function qlFindOrCreateCollection() { const cols = await rdGetCollections(); const found = cols.find(c => c.title === QL_COLLECTION_NAME); if (found) return found; return await rdCreateCollection(QL_COLLECTION_NAME); }
+
+function rdParseNoteMeta(note) {
+  if (!note) return {};
+  try { return JSON.parse(note); } catch { return {}; }
+}
+
+function rdBuildNoteMeta(link) {
+  const meta = {};
+  if (link.icon) meta.icon = link.icon;
+  if (link.noFavicon) meta.noFavicon = true;
+  if (link.faviconBg && link.faviconBg !== 'white') meta.faviconBg = link.faviconBg;
+  return Object.keys(meta).length ? JSON.stringify(meta) : '';
+}
+
+function rdRaindropToLocal(rd) {
+  const meta = rdParseNoteMeta(rd.note);
+  return {
+    id: 'rd-' + rd._id,
+    raindropId: rd._id,
+    url: rd.link,
+    label: rd.title,
+    favicon: rd.cover || null,
+    section: 'default',
+    icon: meta.icon || null,
+    noFavicon: meta.noFavicon || null,
+    faviconBg: meta.faviconBg || null,
+    lastUpdate: rd.lastUpdate ? new Date(rd.lastUpdate).getTime() : 0,
+  };
+}
+
+function rdLocalToRaindrop(link, collectionId) {
+  return {
+    link: link.url,
+    title: link.label,
+    collection: { '$id': collectionId },
+    cover: link.favicon || '',
+    note: rdBuildNoteMeta(link),
+  };
+}
+
+async function rdSyncOnAdd(link) {
+  if (!isQLConfigured()) return link;
   try {
-    const project = getAsanaProject();
-    const workspace = getAsanaWorkspace();
-    const notes = Array.isArray(state.notes) ? state.notes : [];
-
-    setSyncBar('syncing', `Pushing ${notes.length} note(s)…`);
-    for (const note of notes) {
-      const htmlNotes = markdownToAsanaHtml(note.content ?? '');
-      const title = (note.title || 'Untitled').slice(0, 200);
-      if (note.asanaTaskGid) {
-        try {
-          const updated = await asanaUpdateTask(note.asanaTaskGid, { name: title, html_notes: htmlNotes });
-          if (updated?.modified_at) setAsanaModified(note.asanaTaskGid, updated.modified_at);
-        } catch (err) {
-          if (/404/.test(err.message)) {
-            const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
-            if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
-          } else { throw err; }
-        }
-      } else {
-        const created = await asanaCreateTask(project.gid, workspace.gid, title, htmlNotes);
-        if (created?.gid) { note.asanaTaskGid = created.gid; setAsanaModified(created.gid, created.modified_at); }
-      }
+    const collectionId = getQLCollectionId();
+    const data = rdLocalToRaindrop(link, collectionId);
+    const existing = state.links.filter(l => l.raindropId);
+    data.order = existing.length;
+    const rd = await rdCreateRaindrop(data);
+    if (rd?._id) {
+      link.raindropId = rd._id;
+      link.id = 'rd-' + rd._id;
     }
-
-    saveState({ skipSchedule: true });
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus(`Synced ${t}`);
-    setSyncBar('connected', `Synced to Asana — ${t}`);
   } catch (err) {
-    setSyncStatus(`Sync error: ${err.message}`);
-    showToast(`⚠ ${err.message}`);
-    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
-  } finally {
-    syncInProgress = false;
+    console.warn('Raindrop create failed:', err.message);
+  }
+  return link;
+}
+
+async function rdSyncOnEdit(link) {
+  if (!isQLConfigured() || !link.raindropId) return;
+  try {
+    await rdUpdateRaindrop(link.raindropId, {
+      link: link.url,
+      title: link.label,
+      cover: link.favicon || '',
+      note: rdBuildNoteMeta(link),
+    });
+  } catch (err) {
+    console.warn('Raindrop update failed:', err.message);
   }
 }
 
-async function pullSync() {
-  if (!isSyncConfigured()) return;
+async function rdSyncOnDelete(raindropId) {
+  if (!isQLConfigured() || !raindropId) return;
   try {
-    setSyncStatus('Pulling from Asana…');
-    setSyncBar('syncing', 'Pulling from Asana…');
+    await rdDeleteRaindrop(raindropId);
+  } catch (err) {
+    console.warn('Raindrop delete failed:', err.message);
+  }
+}
 
-    const project = getAsanaProject();
-    const tasks = await asanaListTasks(project.gid);
+async function rdSyncOnReorder() {
+  if (!isQLConfigured()) return;
+  const linked = state.links.filter(l => l.raindropId && !l.fromBookmark);
+  for (let i = 0; i < linked.length; i++) {
+    try {
+      await rdUpdateRaindrop(linked[i].raindropId, { order: i });
+    } catch {}
+  }
+}
 
-    const localNotes = (state.notes || []).map(n => ({ ...n }));
-    const localByGid = new Map(localNotes.filter(n => n.asanaTaskGid).map(n => [n.asanaTaskGid, n]));
-    const localActiveNoteId = state.activeNoteId;
-    const mergedNotes = [];
-    const processedLocalIds = new Set();
+async function qlPullSync() {
+  if (!isQLConfigured() || qlSyncInProgress) return;
+  qlSyncInProgress = true;
+  try {
+    setQLStatus('Syncing…');
+    const collectionId = getQLCollectionId();
+    const remoteRds = await rdGetAllRaindrops(collectionId);
 
-    for (const task of tasks) {
-      if (task.completed) continue; // completed tasks = deleted notes
-      const matched = localByGid.get(task.gid);
-      const remoteMd = task.html_notes ? asanaHtmlToMarkdown(task.html_notes) : (task.notes || '');
-      if (matched) {
-        matched.title = task.name || matched.title;
-        matched.content = remoteMd;
-        matched.asanaTaskGid = task.gid;
-        setAsanaModified(task.gid, task.modified_at);
-        mergedNotes.push(matched);
-        processedLocalIds.add(matched.id);
+    const localByRdId = new Map();
+    const manualLinks = [];
+    for (const l of (state.links || [])) {
+      if (l.raindropId) localByRdId.set(l.raindropId, l);
+      else if (!l.fromBookmark) manualLinks.push(l);
+    }
+
+    const remoteById = new Map(remoteRds.map(rd => [rd._id, rd]));
+    const merged = [];
+
+    for (const rd of remoteRds) {
+      const local = localByRdId.get(rd._id);
+      if (local) {
+        const remoteTime = rd.lastUpdate ? new Date(rd.lastUpdate).getTime() : 0;
+        const localTime = local.lastUpdate || 0;
+        if (remoteTime > localTime) {
+          const updated = rdRaindropToLocal(rd);
+          updated.icon = local.icon || updated.icon;
+          if (local.noFavicon && !updated.icon) updated.noFavicon = local.noFavicon;
+          if (local.faviconBg) updated.faviconBg = local.faviconBg;
+          merged.push(updated);
+        } else {
+          merged.push(local);
+        }
+        localByRdId.delete(rd._id);
       } else {
-        const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-        mergedNotes.push({ id, title: task.name || 'Untitled', content: remoteMd, asanaTaskGid: task.gid });
-        setAsanaModified(task.gid, task.modified_at);
+        merged.push(rdRaindropToLocal(rd));
       }
     }
 
-    // Keep local-only notes that were never pushed
-    for (const note of localNotes) {
-      if (!processedLocalIds.has(note.id) && !note.asanaTaskGid) mergedNotes.push(note);
+    for (const orphan of localByRdId.values()) {
+      if (!remoteById.has(orphan.raindropId)) continue;
+      merged.push(orphan);
     }
 
-    state.notes = mergedNotes.length ? mergedNotes : [{ id: 'note-1', title: 'Note 1', content: '' }];
-    if (state.notes.find(n => n.id === localActiveNoteId)) state.activeNoteId = localActiveNoteId;
-    else state.activeNoteId = state.notes[0].id;
-
+    const bookmarkLinks = (state.links || []).filter(l => l.fromBookmark);
+    state.links = [...manualLinks, ...merged, ...bookmarkLinks];
     saveState();
-    loadNotes();
-
-    // Push back so any local-only notes become tasks
-    await pushSync();
-
-    lastPullTime = Date.now();
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus(`Synced ${t}`);
-    setSyncBar('connected', `Synced with Asana — ${t}`);
+    renderLinks();
+    const t = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    setQLStatus(`Synced ${merged.length} links — ${t}`);
   } catch (err) {
-    setSyncStatus(`Sync error: ${err.message}`);
-    showToast(`⚠ ${err.message}`);
-    setSyncBar('disconnected', `Sync failed — ${err.message.slice(0, 60)}`);
+    setQLStatus(`Sync error: ${err.message}`);
+    console.warn('Raindrop pull sync error:', err);
+  } finally {
+    qlSyncInProgress = false;
   }
 }
 
-async function handleNoteDeletion(asanaTaskGid) {
-  if (!asanaTaskGid || !isSyncConfigured()) return;
-  try { await asanaCompleteTask(asanaTaskGid); } catch {}
+function initQLSync() {
+  if (isQLConfigured()) {
+    setQLStatus('Connected');
+    qlPullSync();
+  }
 }
 
+function spQlMakeIcon(svg) {
+  return svgFromString(svg);
+}
+
+function spQlActionBtn(cls, title, svgStr, handler) {
+  const btn = document.createElement('button');
+  btn.className = cls;
+  btn.title = title;
+  btn.appendChild(spQlMakeIcon(svgStr));
+  btn.addEventListener('click', handler);
+  return btn;
+}
+
+function renderSidePanelQuickLinks() {
+  const list = document.getElementById('sp-ql-list');
+  if (!list) return;
+  list.textContent = '';
+
+  const links = state.links || [];
+  if (!links.length) {
+    const empty = document.createElement('div');
+    empty.id = 'sp-ql-empty';
+    const msg = document.createElement('span');
+    msg.textContent = 'No quick links yet.';
+    const hint = document.createElement('small');
+    hint.style.opacity = '0.6';
+    hint.textContent = 'Add links from the button above or from the main panel.';
+    empty.appendChild(msg);
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(hint);
+    list.appendChild(empty);
+    return;
+  }
+
+  const newtabSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  const editSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const deleteSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
+  links.forEach(link => {
+    const row = document.createElement('div');
+    row.className = 'sp-ql-item';
+    row.dataset.id = link.id;
+
+    const _letter = (link.label || '?')[0].toUpperCase();
+    if (link.icon && typeof HEROICONS !== 'undefined' && HEROICONS[link.icon]) {
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'sp-ql-favicon hero-icon';
+      iconDiv.appendChild(svgFromString(heroiconSvg(link.icon, 18)));
+      row.appendChild(iconDiv);
+    } else if (link.noFavicon) {
+      const fb = document.createElement('div');
+      fb.className = 'sp-ql-favicon fallback';
+      fb.textContent = _letter;
+      row.appendChild(fb);
+    } else if (link.favicon) {
+      const img = document.createElement('img');
+      img.className = 'sp-ql-favicon';
+      img.src = link.favicon;
+      img.alt = '';
+      const fb = document.createElement('div');
+      fb.className = 'sp-ql-favicon fallback';
+      fb.style.display = 'none';
+      fb.textContent = _letter;
+      img.addEventListener('error', () => { img.style.display = 'none'; fb.style.display = 'flex'; });
+      row.appendChild(img);
+      row.appendChild(fb);
+    } else {
+      const tmp = document.createElement('span');
+      const parsed = new DOMParser().parseFromString(faviconImgHtml(link.url, link.label, 'sp-ql-favicon'), 'text/html');
+      Array.from(parsed.body.childNodes).forEach(n => tmp.appendChild(document.importNode(n, true)));
+      while (tmp.firstChild) row.appendChild(tmp.firstChild);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'sp-ql-item-label';
+    label.textContent = link.label || getUrlLabel(link.url);
+    row.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'sp-ql-item-actions';
+    actions.appendChild(spQlActionBtn('sp-ql-newtab', 'Open in new tab', newtabSvg, e => { e.stopPropagation(); window.open(link.url, '_blank'); }));
+    actions.appendChild(spQlActionBtn('sp-ql-edit', 'Edit', editSvg, e => { e.stopPropagation(); openEditModal(link.id); }));
+    actions.appendChild(spQlActionBtn('sp-ql-delete delete', 'Delete', deleteSvg, e => { e.stopPropagation(); deleteLink(link.id); renderSidePanelQuickLinks(); }));
+    row.appendChild(actions);
+
+    row.addEventListener('click', e => {
+      if (e.target.closest('.sp-ql-item-actions')) return;
+      window.open(link.url, '_blank');
+    });
+
+    list.appendChild(row);
+  });
+}
+
+function initSidePanelQuickLinks() {
+  const addBtn = document.getElementById('sp-ql-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openAddModal());
+
+  const syncBtn = document.getElementById('sp-ql-sync-btn');
+  if (syncBtn) syncBtn.addEventListener('click', async () => {
+    if (isQLConfigured()) {
+      await qlPullSync();
+      renderSidePanelQuickLinks();
+    } else {
+      const statusEl = document.getElementById('sp-ql-status');
+      if (statusEl) statusEl.textContent = 'Connect Raindrop.io in Settings';
+    }
+  });
+}
+
+function initRaindropSettings() {
+  const tokenInput = document.getElementById('rd-token');
+  const connectBtn = document.getElementById('rd-connect-btn');
+  const disconnectBtn = document.getElementById('rd-disconnect-btn');
+  const syncBtn = document.getElementById('rd-sync-btn');
+
+  if (!tokenInput) return;
+
+  tokenInput.value = getRaindropToken();
+
+  tokenInput.addEventListener('change', () => {
+    setRaindropToken(tokenInput.value);
+  });
+
+  connectBtn?.addEventListener('click', async () => {
+    try {
+      setQLStatus('Connecting…');
+      const token = tokenInput.value.trim();
+      if (!token) throw new Error('Enter a test token');
+      setRaindropToken(token);
+      const qlCol = await qlFindOrCreateCollection();
+      if (qlCol?._id) { setQLCollectionId(qlCol._id); setQLStatus('Connected'); }
+      await qlPullSync();
+    } catch (err) {
+      setQLStatus(err.message);
+    }
+  });
+
+  disconnectBtn?.addEventListener('click', () => {
+    setRaindropToken('');
+    setQLCollectionId(null);
+    tokenInput.value = '';
+    setQLStatus('(not connected)');
+  });
+
+  syncBtn?.addEventListener('click', () => {
+    if (isQLConfigured()) qlPullSync();
+  });
+
+  initQLSync();
+}
+
+async function consumePendingQuickLinks() {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+  try {
+    const result = await chrome.storage.local.get('lumina_pending_quicklinks');
+    const pending = result.lumina_pending_quicklinks;
+    if (!Array.isArray(pending) || !pending.length) return;
+    await chrome.storage.local.remove('lumina_pending_quicklinks');
+    let changed = false;
+    for (const link of pending) {
+      const dup = state.links.find(l => l.url === link.url);
+      if (dup) continue;
+      state.links.push(link);
+      changed = true;
+    }
+    if (changed) { saveState(); renderLinks(); }
+  } catch {}
+}
+
+// ─── INIT ────────────────────────────────────────
 function buildQuickLinksMarkdown() {
-  const links = (state.links || []).filter(l => !l.fromBookmark);
+  const links = state.links || [];
   let md = '# Quick Links\n\n';
   if (!links.length) return md + '_No links_\n';
   for (const link of links) {
     md += `- [${link.label}](${link.url})\n`;
   }
   return md;
-}
-
-function buildSavedLinksMarkdown() {
-  const links = savedData?.links || [];
-  const tags = savedData?.tags || [];
-  if (!links.length) return '# Kindling\n\n_Empty_\n';
-
-  let md = '# Kindling\n\n';
-
-  // Group by tags
-  const tagMap = new Map();
-  const untagged = [];
-  for (const link of links) {
-    if (!link.tags?.length) { untagged.push(link); continue; }
-    for (const tag of link.tags) {
-      if (!tagMap.has(tag)) tagMap.set(tag, []);
-      tagMap.get(tag).push(link);
-    }
-  }
-
-  // Render tagged sections (in tag definition order)
-  for (const tag of tags) {
-    const items = tagMap.get(tag.name);
-    if (!items?.length) continue;
-    md += `## ${tag.name}\n\n`;
-    for (const link of items) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  // Render any tags not in the tags list
-  for (const [tagName, items] of tagMap) {
-    if (tags.find(t => t.name === tagName)) continue;
-    md += `## ${tagName}\n\n`;
-    for (const link of items) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  // Render untagged
-  if (untagged.length) {
-    md += `## Untagged\n\n`;
-    for (const link of untagged) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  return md.trimEnd() + '\n';
-}
-
-function schedulePush() {
-  if (!isSyncConfigured()) return;
-  clearTimeout(syncDebounceTimer);
-  syncDebounceTimer = setTimeout(pushSync, 3000);
-}
-
-function flushSyncNow() {
-  if (!isSyncConfigured()) return;
-  clearTimeout(syncDebounceTimer);
-  syncDebounceTimer = null;
-  pushSync();
 }
 
 function downloadTextFile(filename, text, mime) {
@@ -3673,160 +2774,6 @@ function downloadTextFile(filename, text, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function replaceOptions(select, items, currentGid) {
-  while (select.firstChild) select.removeChild(select.firstChild);
-  for (const item of items) {
-    const opt = document.createElement('option');
-    opt.value = item.value;
-    opt.textContent = item.label;
-    if (item.value === currentGid) opt.selected = true;
-    select.appendChild(opt);
-  }
-}
-
-async function populateWorkspaceSelect(select) {
-  const pat = getAsanaPat();
-  if (!pat) return;
-  try {
-    const me = await asanaMe();
-    const current = getAsanaWorkspace()?.gid || '';
-    const items = (me?.workspaces || []).map(w => ({ value: w.gid, label: w.name }));
-    replaceOptions(select, items, current);
-  } catch {
-    replaceOptions(select, [{ value: '', label: '(token invalid)' }], '');
-  }
-}
-
-async function ensureAsanaProject() {
-  const project = getAsanaProject();
-  const workspace = getAsanaWorkspace();
-  if (!workspace?.gid) throw new Error('Pick a workspace first');
-  if (project?.gid) {
-    try {
-      const fresh = await asanaApi(`/projects/${project.gid}?opt_fields=gid,name,privacy_setting`);
-      if (fresh?.data?.gid) return fresh.data;
-    } catch {
-      // project gone / inaccessible — fall through and recreate
-    }
-  }
-  const created = await asanaCreatePrivateProject(workspace.gid, ASANA_PROJECT_NAME);
-  if (created?.gid) { setAsanaProject({ gid: created.gid, name: created.name }); return created; }
-  throw new Error('Could not create Lumina Notes project');
-}
-
-function initSync() {
-  const patInput = document.getElementById('asana-pat');
-  const workspaceSelect = document.getElementById('asana-workspace-select');
-  const connectBtn = document.getElementById('asana-connect-btn');
-  const disconnectBtn = document.getElementById('asana-disconnect-btn');
-  const projectName = document.getElementById('asana-project-name');
-  const exportLinksBtn = document.getElementById('asana-export-links-btn');
-  const exportSettingsBtn = document.getElementById('asana-export-settings-btn');
-
-  if (!patInput) return;
-
-  patInput.value = getAsanaPat();
-  const proj = getAsanaProject();
-  if (projectName) projectName.textContent = proj?.name || '(not connected)';
-  if (getAsanaWorkspace()?.gid && workspaceSelect) populateWorkspaceSelect(workspaceSelect);
-
-  patInput.addEventListener('change', async () => {
-    setAsanaPat(patInput.value);
-    if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
-    checkAsanaConnection();
-  });
-
-  workspaceSelect?.addEventListener('change', () => {
-    const opt = workspaceSelect.selectedOptions[0];
-    if (opt?.value) setAsanaWorkspace({ gid: opt.value, name: opt.textContent });
-    setAsanaProject(null);
-    if (projectName) projectName.textContent = '(not connected)';
-    checkAsanaConnection();
-  });
-
-  connectBtn?.addEventListener('click', async () => {
-    try {
-      setSyncBar('syncing', 'Connecting to Asana…');
-      if (!getAsanaPat()) throw new Error('Enter a Personal Access Token');
-      const me = await asanaMe();
-      const workspaces = me?.workspaces || [];
-      if (!workspaces.length) throw new Error('No workspaces on this account');
-      let selected = getAsanaWorkspace();
-      if (!selected?.gid) {
-        const first = workspaces[0];
-        selected = { gid: first.gid, name: first.name };
-        setAsanaWorkspace(selected);
-      }
-      if (workspaceSelect) await populateWorkspaceSelect(workspaceSelect);
-      const project = await ensureAsanaProject();
-      if (projectName) projectName.textContent = project.name;
-      setSyncBar('connected', `Connected — ${project.name}`);
-      setSyncStatus('Ready — click Sync to pull');
-    } catch (err) {
-      setSyncBar('disconnected', err.message);
-      showToast(`⚠ ${err.message}`);
-    }
-  });
-
-  disconnectBtn?.addEventListener('click', () => {
-    setAsanaPat('');
-    setAsanaWorkspace(null);
-    setAsanaProject(null);
-    patInput.value = '';
-    if (workspaceSelect) replaceOptions(workspaceSelect, [], '');
-    if (projectName) projectName.textContent = '(not connected)';
-    setSyncBar('disconnected', 'Disconnected from Asana');
-    setSyncStatus('');
-  });
-
-  document.getElementById('sync-now-btn').addEventListener('click', () => {
-    if (!isSyncConfigured()) { setSyncStatus('Connect to Asana first'); return; }
-    clearTimeout(syncDebounceTimer);
-    syncDebounceTimer = null;
-    pullSync();
-  });
-
-  exportLinksBtn?.addEventListener('click', () => {
-    downloadTextFile('lumina-links.md', buildQuickLinksMarkdown() + '\n---\n\n' + buildSavedLinksMarkdown(), 'text/markdown');
-  });
-  exportSettingsBtn?.addEventListener('click', () => {
-    const payload = { exportedAt: new Date().toISOString(), state, saved: savedData };
-    downloadTextFile('lumina-settings.json', JSON.stringify(payload, null, 2), 'application/json');
-  });
-
-  if (isSyncConfigured()) setSyncStatus('Ready — click Sync to pull');
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushSyncNow();
-    else if (document.visibilityState === 'visible' && isSyncConfigured() && Date.now() - lastPullTime > 30_000) pullSync();
-  });
-  window.addEventListener('blur', () => { flushSyncNow(); });
-  window.addEventListener('pagehide', () => { flushSyncNow(); });
-  checkAsanaConnection();
-}
-
-async function checkAsanaConnection() {
-  if (!getAsanaPat()) {
-    setSyncBar('disconnected', 'Asana sync not configured — add your Personal Access Token');
-    return;
-  }
-  try {
-    const me = await asanaMe();
-    if (!me?.gid) throw new Error('Token rejected');
-    if (!getAsanaWorkspace()?.gid) {
-      setSyncBar('disconnected', 'Pick a workspace to finish connecting');
-      return;
-    }
-    if (!getAsanaProject()?.gid) {
-      setSyncBar('disconnected', 'Click Connect to create the Lumina Notes project');
-      return;
-    }
-    setSyncBar('connected', `Connected as ${me.name}`);
-  } catch (err) {
-    setSyncBar('disconnected', `Cannot reach Asana — ${err.message.slice(0, 60)}`);
-  }
-}
-
 // ─── SETUP WIZARD ───────────────────────────────
 function isFirstInstall() {
   return !localStorage.getItem('lumina_setup_done');
@@ -3836,7 +2783,6 @@ function showSetupOverlay() {
   const overlay = document.getElementById('setup-overlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
-  goToSetupStep('welcome');
 }
 
 function hideSetupOverlay() {
@@ -3845,74 +2791,9 @@ function hideSetupOverlay() {
   localStorage.setItem('lumina_setup_done', '1');
 }
 
-function goToSetupStep(stepName) {
-  const steps = document.querySelectorAll('.setup-step');
-  steps.forEach(s => {
-    s.classList.toggle('active', s.dataset.step === stepName);
-  });
-}
-
 function initSetupWizard() {
-  const connectBtn = document.getElementById('setup-connect-btn');
-  const skipBtn = document.getElementById('setup-skip-btn');
-  const testBtn = document.getElementById('setup-test-btn');
-  const backBtn = document.getElementById('setup-back-btn');
-  const importBtn = document.getElementById('setup-import-btn');
-  const freshBtn = document.getElementById('setup-fresh-btn');
   const doneBtn = document.getElementById('setup-done-btn');
-
-  if (!connectBtn) return;
-
-  connectBtn.addEventListener('click', () => goToSetupStep('configure'));
-  skipBtn.addEventListener('click', () => hideSetupOverlay());
-  backBtn.addEventListener('click', () => goToSetupStep('welcome'));
-
-  testBtn.addEventListener('click', async () => {
-    const patInput = document.getElementById('setup-asana-pat');
-    const statusEl = document.getElementById('setup-test-status');
-    const pat = (patInput?.value || '').trim();
-    if (!pat) {
-      statusEl.textContent = 'Please paste a Personal Access Token';
-      statusEl.className = 'setup-test-status error';
-      return;
-    }
-    statusEl.textContent = 'Connecting to Asana…';
-    statusEl.className = 'setup-test-status testing';
-    try {
-      setAsanaPat(pat);
-      const me = await asanaMe();
-      if (!me?.workspaces?.length) throw new Error('No workspaces on this account');
-      const first = me.workspaces[0];
-      setAsanaWorkspace({ gid: first.gid, name: first.name });
-      const project = await ensureAsanaProject();
-      const settingsPat = document.getElementById('asana-pat');
-      if (settingsPat) settingsPat.value = pat;
-      statusEl.textContent = `Connected — project "${project.name}" ready`;
-      statusEl.className = 'setup-test-status success';
-      setTimeout(() => goToSetupStep('import'), 600);
-    } catch (err) {
-      statusEl.textContent = `Connection failed — ${err.message.slice(0, 80)}`;
-      statusEl.className = 'setup-test-status error';
-    }
-  });
-
-  importBtn.addEventListener('click', async () => {
-    const desc = document.getElementById('setup-done-desc');
-    try {
-      await pushSync();
-      if (desc) desc.textContent = 'Your existing notes have been pushed to Asana as tasks. Enjoy your new tab!';
-    } catch {
-      if (desc) desc.textContent = 'Push had some issues, but Lumina is ready. You can sync again from Settings.';
-    }
-    goToSetupStep('done');
-  });
-
-  freshBtn.addEventListener('click', () => {
-    const desc = document.getElementById('setup-done-desc');
-    if (desc) desc.textContent = 'Lumina is connected to Asana and ready to sync. Enjoy your new tab!';
-    goToSetupStep('done');
-  });
-
+  if (!doneBtn) return;
   doneBtn.addEventListener('click', () => hideSetupOverlay());
 }
 
@@ -3927,14 +2808,17 @@ function getSettingsArchive() {
 
 function archiveCurrentSettings() {
   const archive = getSettingsArchive();
+  const data = JSON.parse(JSON.stringify(state));
+  delete data.links;
+  delete data.addressBook;
   const snapshot = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     timestamp: Date.now(),
-    data: JSON.parse(JSON.stringify(state)),
+    data,
   };
   archive.unshift(snapshot);
   if (archive.length > MAX_SETTINGS_REVISIONS) archive.length = MAX_SETTINGS_REVISIONS;
-  localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive));
+  try { localStorage.setItem(SETTINGS_ARCHIVE_KEY, JSON.stringify(archive)); } catch {}
 }
 
 function restoreSettingsRevision(revisionId) {
@@ -4014,13 +2898,10 @@ function init() {
 
   // Restore sidebar states
   if (state.notesPanelOpen !== false) openNotesPanel();
-  applySavedFaviconBg(state.savedFaviconBg || 'white');
-  loadSavedLinks().then(() => {
-    renderSavedFilters();
-    renderSavedList();
-  });
 
-  initSync();
+  initRaindropSettings();
+  initSidePanelQuickLinks();
+  consumePendingQuickLinks();
   if (Array.isArray(state.addressBook) && typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.set({ lumina_address_book: state.addressBook }).catch(() => {});
   }
