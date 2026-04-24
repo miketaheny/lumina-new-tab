@@ -4,23 +4,22 @@ Personal Chrome extension that replaces the new tab page with a productivity das
 
 ## Stack
 
-- **v1** — vanilla JS Chrome extension (Manifest V3, actively maintained, separate concept from v2)
-- **v2** — Turborepo monorepo, TypeScript, React 19
-  - `v2/apps/extension` — WXT-based Chrome extension
-  - `v2/apps/web` — Next.js 15 web app (Playwright for e2e)
-  - `v2/packages/core` — shared logic
-  - `v2/packages/drive` — Google Drive integration
-  - `v2/packages/ui` — shared UI components
+- **extension** — vanilla JS Chrome extension (Manifest V3, actively maintained)
+- **web** — Turborepo monorepo, TypeScript, React 19
+  - `web/apps/web` — Next.js 15 web app (Playwright for e2e)
+  - `web/packages/core` — shared logic
+  - `web/packages/drive` — Google Drive integration
+  - `web/packages/ui` — shared UI components
 
 ## File conventions
 
-- v1 and v2 are independent codebases in the same repo — changes to one don't affect the other
-- v2 uses npm workspaces via Turborepo; run commands from `v2/` root
-- Component per file in v2 packages
+- `extension/` and `web/` are independent codebases in the same repo — changes to one don't affect the other
+- `web/` uses npm workspaces via Turborepo; run commands from `web/` root
+- Component per file in `web/` packages
 
 ## Verification commands
 
-Run from `v2/`:
+Run from `web/`:
 
 ```
 npm run typecheck

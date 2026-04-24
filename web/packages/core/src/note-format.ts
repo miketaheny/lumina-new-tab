@@ -1,4 +1,3 @@
-// v2/packages/core/src/note-format.ts
 import type { Note } from './types';
 
 function yamlValue(val: string): string {

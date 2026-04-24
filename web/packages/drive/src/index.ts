@@ -1,4 +1,3 @@
-// v2/packages/drive/src/index.ts
 export { setAuthProvider, getAccessToken, isSignedIn } from './auth';
 export type { AuthProvider, UserProfile } from './auth';
 export {

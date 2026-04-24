@@ -1,4 +1,3 @@
-// v2/packages/core/src/defaults.ts
 import type { LuminaSettings, QuickLinksData, KindlingData, BookmarksData, WallpapersManifest, SyncMeta, SnippetsData } from './types';
 
 export const DEFAULT_SETTINGS: LuminaSettings = {
