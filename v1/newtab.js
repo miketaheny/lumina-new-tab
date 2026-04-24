@@ -35,7 +35,6 @@ const DEFAULT_STATE = {
   notes: null,
   activeNoteId: null,
   addressBook: [],
-  savedFaviconBg: 'white',
 };
 
 let state = JSON.parse(localStorage.getItem('lumina_state') || 'null') || DEFAULT_STATE;
@@ -1850,7 +1849,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     hideModal();
     hideExportModal();
-    closeSaveModal();
     closeSettingsPanel();
     closeNotesPanel();
     closeHelpPanel();
@@ -1882,7 +1880,6 @@ document.querySelectorAll('.notes-tab').forEach(tab => {
     document.querySelectorAll('.notes-tab').forEach(t => t.classList.toggle('active', t === tab));
     document.getElementById('notes-tab-content').classList.toggle('active', which === 'notes');
     document.getElementById('quicklinks-tab-content').classList.toggle('active', which === 'quicklinks');
-    document.getElementById('saved-tab-content').classList.toggle('active', which === 'saved');
     if (which === 'quicklinks') renderSidePanelQuickLinks();
   });
 });
@@ -2343,45 +2340,8 @@ document.getElementById('export-copy-btn').addEventListener('click', () => {
   });
 });
 
-// ─── SAVED LINKS ──────────────────────────────────
-const TAG_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e',
-  '#14b8a6', '#3b82f6', '#a78bfa', '#ec4899',
-];
-
-let savedData = { links: [], tags: [] };
-let savedFilter = 'all';
-let savedSort = 'date'; // 'date' | 'title'
-let selectedTagsForSave = [];
-let selectedTagColor = TAG_COLORS[6];
-let editingLinkId = null;
-
-async function loadSavedLinks() {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try {
-      const result = await chrome.storage.local.get('lumina_saved');
-      if (result.lumina_saved) savedData = result.lumina_saved;
-      return;
-    } catch (e) { /* fall through */ }
-  }
-  const raw = localStorage.getItem('lumina_saved');
-  if (raw) try { savedData = JSON.parse(raw); } catch (e) {}
-}
-
-async function persistSavedLinks() {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try { await chrome.storage.local.set({ lumina_saved: savedData }); }
-    catch (e) { localStorage.setItem('lumina_saved', JSON.stringify(savedData)); }
-  } else {
-    localStorage.setItem('lumina_saved', JSON.stringify(savedData));
-  }
-}
-
-// ─── Raindrop.io API client ────────────────────
+// ─── Raindrop.io API client ────────────��───────
 const RAINDROP_API = 'https://api.raindrop.io/rest/v1';
-const RAINDROP_COLLECTION_NAME = 'Kindling';
-let raindropSyncInProgress = false;
-
 function getRaindropToken() { return (localStorage.getItem('lumina_raindrop_token') || '').trim(); }
 function setRaindropToken(v) {
   localStorage.setItem('lumina_raindrop_token', (v || '').trim());
@@ -2389,17 +2349,6 @@ function setRaindropToken(v) {
     chrome.storage.local.set({ lumina_raindrop_token: (v || '').trim() }).catch(() => {});
   }
 }
-function getRaindropCollectionId() {
-  try { return JSON.parse(localStorage.getItem('lumina_raindrop_collection') || 'null'); } catch { return null; }
-}
-function setRaindropCollectionId(id) {
-  localStorage.setItem('lumina_raindrop_collection', JSON.stringify(id));
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    chrome.storage.local.set({ lumina_raindrop_collection: id }).catch(() => {});
-  }
-}
-function isRaindropConfigured() { return !!(getRaindropToken() && getRaindropCollectionId()); }
-
 async function raindropApi(method, path, body) {
   const token = getRaindropToken();
   if (!token) throw new Error('No Raindrop.io token configured');
@@ -2463,506 +2412,9 @@ async function rdDeleteRaindrop(id) {
   return raindropApi('DELETE', `/raindrop/${id}`);
 }
 
-async function ensureRaindropCollection() {
-  const existingId = getRaindropCollectionId();
-  if (existingId) {
-    try {
-      const j = await raindropApi('GET', `/collection/${existingId}`);
-      if (j?.item?._id) return j.item._id;
-    } catch {}
-  }
-  const collections = await rdGetCollections();
-  const found = collections.find(c => c.title === RAINDROP_COLLECTION_NAME);
-  if (found) {
-    setRaindropCollectionId(found._id);
-    return found._id;
-  }
-  const created = await rdCreateCollection(RAINDROP_COLLECTION_NAME);
-  if (created?._id) {
-    setRaindropCollectionId(created._id);
-    return created._id;
-  }
-  throw new Error('Could not create Kindling collection');
-}
-
-function raindropToLocal(rd) {
-  return {
-    id: 'sl-' + rd._id,
-    raindropId: rd._id,
-    url: rd.link,
-    title: rd.title || '',
-    tags: Array.isArray(rd.tags) ? [...rd.tags] : [],
-    savedAt: new Date(rd.created).getTime() || Date.now(),
-    readAt: rd.important ? null : Date.now(),
-    lastUpdate: rd.lastUpdate || rd.created,
-  };
-}
-
-function localToRaindropPayload(link, collectionId) {
-  return {
-    link: link.url,
-    title: link.title || '',
-    collection: { '$id': collectionId },
-    tags: Array.isArray(link.tags) ? [...link.tags] : [],
-    important: !link.readAt,
-  };
-}
-
-async function raindropPullSync() {
-  if (!isRaindropConfigured()) return;
-  if (raindropSyncInProgress) return;
-  raindropSyncInProgress = true;
-  setKindlingStatus('Pulling from Raindrop.io…');
-  try {
-    const collectionId = getRaindropCollectionId();
-    const remoteItems = await rdGetAllRaindrops(collectionId);
-    const remoteById = new Map(remoteItems.map(r => [r._id, r]));
-
-    const localLinks = savedData.links || [];
-    const localByRaindropId = new Map();
-    for (const l of localLinks) {
-      if (l.raindropId) localByRaindropId.set(l.raindropId, l);
-    }
-
-    const merged = [];
-    const processedRemoteIds = new Set();
-
-    for (const rd of remoteItems) {
-      processedRemoteIds.add(rd._id);
-      const local = localByRaindropId.get(rd._id);
-      if (local) {
-        const remoteTime = new Date(rd.lastUpdate || rd.created).getTime();
-        const localTime = local.lastUpdate ? new Date(local.lastUpdate).getTime() : (local.savedAt || 0);
-        if (remoteTime >= localTime) {
-          merged.push({ ...local, ...raindropToLocal(rd) });
-        } else {
-          merged.push(local);
-        }
-      } else {
-        merged.push(raindropToLocal(rd));
-      }
-    }
-
-    for (const local of localLinks) {
-      if (local.raindropId && !processedRemoteIds.has(local.raindropId)) continue;
-      if (!local.raindropId) merged.push(local);
-    }
-
-    const remoteTags = new Set();
-    for (const rd of remoteItems) {
-      if (Array.isArray(rd.tags)) rd.tags.forEach(t => remoteTags.add(t));
-    }
-    for (const tagName of remoteTags) {
-      if (!savedData.tags.find(t => t.name === tagName)) {
-        savedData.tags.push({ name: tagName, color: TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)] });
-      }
-    }
-
-    savedData.links = merged;
-    await persistSavedLinksLocal();
-    renderSavedFilters();
-    renderSavedList();
-
-    await raindropPushLocalOnly();
-
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setKindlingStatus(`Synced ${t}`);
-  } catch (err) {
-    setKindlingStatus(`Sync error: ${err.message.slice(0, 60)}`);
-    showToast(`⚠ ${err.message}`);
-  } finally {
-    raindropSyncInProgress = false;
-  }
-}
-
-async function raindropPushLocalOnly() {
-  if (!isRaindropConfigured()) return;
-  const collectionId = getRaindropCollectionId();
-  let dirty = false;
-  for (const link of savedData.links) {
-    if (!link.raindropId) {
-      try {
-        const created = await rdCreateRaindrop(localToRaindropPayload(link, collectionId));
-        if (created?._id) {
-          link.raindropId = created._id;
-          link.id = 'sl-' + created._id;
-          link.lastUpdate = created.lastUpdate || new Date().toISOString();
-          dirty = true;
-        }
-      } catch {}
-    }
-  }
-  if (dirty) await persistSavedLinksLocal();
-}
-
-async function persistSavedLinksLocal() {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try { await chrome.storage.local.set({ lumina_saved: savedData }); }
-    catch (e) { localStorage.setItem('lumina_saved', JSON.stringify(savedData)); }
-  } else {
-    localStorage.setItem('lumina_saved', JSON.stringify(savedData));
-  }
-}
-
-async function raindropSyncOnSave(link, action) {
-  if (!isRaindropConfigured()) return;
-  const collectionId = getRaindropCollectionId();
-  try {
-    if (action === 'create' && !link.raindropId) {
-      const created = await rdCreateRaindrop(localToRaindropPayload(link, collectionId));
-      if (created?._id) {
-        link.raindropId = created._id;
-        link.id = 'sl-' + created._id;
-        link.lastUpdate = created.lastUpdate || new Date().toISOString();
-        await persistSavedLinksLocal();
-      }
-    } else if (action === 'update' && link.raindropId) {
-      const updated = await rdUpdateRaindrop(link.raindropId, {
-        title: link.title || '',
-        tags: link.tags || [],
-        important: !link.readAt,
-      });
-      if (updated?.lastUpdate) {
-        link.lastUpdate = updated.lastUpdate;
-        await persistSavedLinksLocal();
-      }
-    } else if (action === 'delete' && link.raindropId) {
-      await rdDeleteRaindrop(link.raindropId);
-    }
-  } catch (err) {
-    showToast(`⚠ Raindrop sync: ${err.message.slice(0, 60)}`);
-  }
-}
-
-function initKindlingSync() {
-  if (isRaindropConfigured()) {
-    setKindlingStatus('Connected');
-    raindropPullSync();
-  }
-}
-
-function setKindlingStatus(msg) {
-  const el = document.getElementById('rd-kindling-status');
-  if (el) el.textContent = msg;
-}
-
-const SAVED_FAVICON_BG = {
-  white:       'rgba(255,255,255,0.92)',
-  dark:        'rgba(20,15,40,0.75)',
-  transparent: 'transparent',
-};
-
-function applySavedFaviconBg(val) {
-  val = val || 'white';
-  state.savedFaviconBg = val;
-  document.documentElement.style.setProperty('--saved-favicon-bg', SAVED_FAVICON_BG[val] || SAVED_FAVICON_BG.white);
-  document.querySelectorAll('.fav-bg-btn').forEach(b => b.classList.toggle('active', b.dataset.bg === val));
-}
-
-let savedStatusFilter = 'all'; // 'all' | 'unread' | 'read'
-
-function makeStatusChip(label, value) {
-  const chip = document.createElement('button');
-  chip.className = 'saved-filter-chip';
-  chip.textContent = label;
-  if (savedStatusFilter === value) {
-    chip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
-  }
-  chip.addEventListener('click', () => {
-    savedStatusFilter = value;
-    renderSavedFilters();
-    renderSavedList();
-  });
-  return chip;
-}
-
-function renderSavedFilters() {
-  const container = document.getElementById('saved-filters');
-  container.innerHTML = '';
-
-  container.appendChild(makeStatusChip('All', 'all'));
-  container.appendChild(makeStatusChip('Unread', 'unread'));
-  container.appendChild(makeStatusChip('Read', 'read'));
-
-  const sep = document.createElement('span');
-  sep.style.cssText = 'width:1px;height:14px;background:var(--glass-border);margin:0 2px;align-self:center;flex-shrink:0;';
-  container.appendChild(sep);
-
-  const allChip = document.createElement('button');
-  allChip.className = 'saved-filter-chip';
-  allChip.textContent = 'All tags';
-  if (savedFilter === 'all') {
-    allChip.style.cssText = 'background:rgba(167,139,250,0.2);border-color:rgba(167,139,250,0.4);color:white';
-  }
-  allChip.addEventListener('click', () => { savedFilter = 'all'; renderSavedFilters(); renderSavedList(); });
-  container.appendChild(allChip);
-
-  savedData.tags.forEach(tag => {
-    const chip = document.createElement('button');
-    chip.className = 'saved-filter-chip';
-    if (savedFilter === tag.name) {
-      chip.style.cssText = `background:${tag.color}33;border-color:${tag.color}88;color:${tag.color}`;
-    }
-    const dot = document.createElement('span');
-    dot.style.cssText = `width:7px;height:7px;border-radius:50%;background:${tag.color};flex-shrink:0`;
-    chip.appendChild(dot);
-    chip.appendChild(document.createTextNode(tag.name));
-    chip.addEventListener('click', () => {
-      savedFilter = (savedFilter === tag.name) ? 'all' : tag.name;
-      renderSavedFilters();
-      renderSavedList();
-    });
-    container.appendChild(chip);
-  });
-}
-
-function renderSavedList() {
-  const list = document.getElementById('saved-list');
-  list.innerHTML = '';
-
-  let links = savedData.links;
-  if (savedFilter !== 'all') {
-    links = links.filter(l => l.tags && l.tags.includes(savedFilter));
-  }
-  if (savedStatusFilter === 'unread') {
-    links = links.filter(l => !l.readAt);
-  } else if (savedStatusFilter === 'read') {
-    links = links.filter(l => !!l.readAt);
-  }
-
-  if (!links.length) {
-    const empty = document.createElement('div');
-    empty.id = 'saved-empty';
-    if (savedFilter === 'all' && savedStatusFilter === 'all') {
-      empty.innerHTML = "Kindling is empty.<br><small style=\"opacity:0.6\">Use the bookmark button in any tab to stash from anywhere.</small>";
-    } else if (savedStatusFilter !== 'all' && savedFilter === 'all') {
-      empty.innerHTML = `Nothing ${escHtml(savedStatusFilter)} yet.`;
-    } else {
-      empty.innerHTML = `No links tagged <strong>${escHtml(savedFilter)}</strong>.`;
-    }
-    list.appendChild(empty);
-    return;
-  }
-
-  const sorted = [...links].sort((a, b) => savedSort === 'title'
-    ? (a.title || '').localeCompare(b.title || '')
-    : (b.savedAt || 0) - (a.savedAt || 0));
-
-  sorted.forEach((link, idx) => {
-    const item = document.createElement('a');
-    item.className = 'saved-item' + (link.readAt ? ' is-read' : '');
-    item.href = link.url;
-    item.target = '_blank';
-    item.rel = 'noopener';
-    item.style.animationDelay = `${idx * 0.03}s`;
-
-    const savedFaviconHtml = faviconImgHtml(link.url, link.title, 'saved-item-favicon');
-    const tagsHtml = (link.tags || []).map(tagName => {
-      const tag = savedData.tags.find(t => t.name === tagName);
-      const color = tag ? tag.color : '#a78bfa';
-      return `<span class="saved-tag-chip" style="background:${color}22;color:${color};border-color:${color}44">${escHtml(tagName)}</span>`;
-    }).join('');
-
-    item.innerHTML = `
-      ${savedFaviconHtml}
-      <div class="saved-item-info">
-        <div class="saved-item-title">${escHtml(link.title || getUrlLabel(link.url))}</div>
-        <div class="saved-item-domain">${escHtml(getUrlLabel(link.url))}</div>
-        ${tagsHtml ? `<div class="saved-item-tags">${tagsHtml}</div>` : ''}
-      </div>
-      <div class="saved-item-actions">
-        <button class="saved-item-read" title="${link.readAt ? 'Mark unread' : 'Mark read'}">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="${link.readAt ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </button>
-        <button class="saved-item-edit" title="Edit tags">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </button>
-        <button class="saved-item-copy" title="Copy URL">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button class="saved-item-delete" title="Remove">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        </button>
-      </div>
-    `;
-
-    item.querySelector('.saved-item-read').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const target = savedData.links.find(l => l.id === link.id);
-      if (!target) return;
-      target.readAt = target.readAt ? null : Date.now();
-      persistSavedLinks();
-      renderSavedList();
-      raindropSyncOnSave(target, 'update');
-    });
-    item.querySelector('.saved-item-edit').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      openSaveModal({ id: link.id, url: link.url, title: link.title, tags: link.tags });
-    });
-    item.querySelector('.saved-item-copy').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      navigator.clipboard.writeText(link.url).then(() => showCopyToast());
-    });
-    item.querySelector('.saved-item-delete').addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const toDelete = savedData.links.find(l => l.id === link.id);
-      savedData.links = savedData.links.filter(l => l.id !== link.id);
-      persistSavedLinks();
-      renderSavedList();
-      if (toDelete) raindropSyncOnSave(toDelete, 'delete');
-    });
-
-    list.appendChild(item);
-  });
-}
-
-// ── Save link modal ──────────────────────────────
-function openSaveModal(prefill = {}) {
-  editingLinkId = prefill.id || null;
-  selectedTagsForSave = Array.isArray(prefill.tags) ? [...prefill.tags] : [];
-  selectedTagColor = TAG_COLORS[6];
-  document.getElementById('saved-modal-url').value = prefill.url || '';
-  document.getElementById('saved-modal-title').value = prefill.title || '';
-  document.getElementById('saved-modal-heading').textContent = editingLinkId ? 'Edit Link' : 'Save Link';
-  document.getElementById('saved-modal-save').textContent = editingLinkId ? 'Save Changes' : 'Save Link';
-  renderSaveTagSelector();
-
-  const m = document.getElementById('saved-modal');
-  m.style.display = 'flex';
-  m.classList.remove('closing');
-  m.querySelector('.modal').classList.remove('closing');
-  setTimeout(() => {
-    const urlEl = document.getElementById('saved-modal-url');
-    (urlEl.value ? document.getElementById('saved-modal-title') : urlEl).focus();
-  }, 50);
-}
-
-function closeSaveModal() {
-  const m = document.getElementById('saved-modal');
-  m.classList.add('closing');
-  m.querySelector('.modal').classList.add('closing');
-  setTimeout(() => { m.style.display = 'none'; }, 200);
-  editingLinkId = null;
-}
-
-function renderSaveTagSelector() {
-  const tagList = document.getElementById('saved-tag-list');
-  tagList.innerHTML = '';
-  savedData.tags.forEach(tag => {
-    const btn = document.createElement('button');
-    btn.className = 'tag-toggle' + (selectedTagsForSave.includes(tag.name) ? ' selected' : '');
-    btn.style.cssText = `background:${tag.color}22;color:${tag.color};border-color:${tag.color}66`;
-    btn.textContent = tag.name;
-    btn.type = 'button';
-    btn.addEventListener('click', () => {
-      const idx = selectedTagsForSave.indexOf(tag.name);
-      if (idx >= 0) selectedTagsForSave.splice(idx, 1);
-      else selectedTagsForSave.push(tag.name);
-      renderSaveTagSelector();
-    });
-    tagList.appendChild(btn);
-  });
-
-  const swatchRow = document.getElementById('saved-tag-colors');
-  swatchRow.innerHTML = '';
-  TAG_COLORS.forEach(color => {
-    const swatch = document.createElement('button');
-    swatch.className = 'tag-color-swatch' + (selectedTagColor === color ? ' selected' : '');
-    swatch.style.background = color;
-    swatch.type = 'button';
-    swatch.addEventListener('click', () => { selectedTagColor = color; renderSaveTagSelector(); });
-    swatchRow.appendChild(swatch);
-  });
-}
-
-function addSaveTag() {
-  const input = document.getElementById('saved-new-tag-input');
-  const name = input.value.trim();
-  if (!name) return;
-  if (!savedData.tags.find(t => t.name === name)) {
-    savedData.tags.push({ name, color: selectedTagColor });
-  }
-  if (!selectedTagsForSave.includes(name)) selectedTagsForSave.push(name);
-  input.value = '';
-  renderSaveTagSelector();
-  renderSavedFilters();
-}
-
-document.getElementById('saved-add-btn').addEventListener('click', () => openSaveModal());
-
-document.querySelectorAll('.saved-sort-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    savedSort = btn.dataset.sort;
-    document.querySelectorAll('.saved-sort-btn').forEach(b => {
-      const active = b.dataset.sort === savedSort;
-      b.style.background = active ? 'rgba(167,139,250,0.15)' : 'var(--glass)';
-      b.style.borderColor = active ? 'rgba(167,139,250,0.3)' : 'var(--glass-border)';
-      b.style.color = active ? 'var(--text)' : 'var(--text-muted)';
-    });
-    renderSavedList();
-  });
-});
-
-document.querySelectorAll('.fav-bg-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applySavedFaviconBg(btn.dataset.bg);
-    saveState();
-  });
-});
-document.getElementById('saved-modal-cancel').addEventListener('click', closeSaveModal);
-document.getElementById('saved-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('saved-modal')) closeSaveModal();
-});
-document.getElementById('saved-new-tag-add').addEventListener('click', addSaveTag);
-document.getElementById('saved-new-tag-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); addSaveTag(); }
-});
-
-document.getElementById('saved-modal-save').addEventListener('click', async () => {
-  let url = document.getElementById('saved-modal-url').value.trim();
-  let title = document.getElementById('saved-modal-title').value.trim();
-  if (!url) { showToast('Please enter a URL'); return; }
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  if (!title) title = getUrlLabel(url);
-
-  let targetLink;
-  if (editingLinkId) {
-    targetLink = savedData.links.find(l => l.id === editingLinkId);
-    if (targetLink) {
-      targetLink.url = url;
-      targetLink.title = title;
-      targetLink.tags = [...selectedTagsForSave];
-    }
-  } else {
-    targetLink = {
-      id: 'sl-' + Date.now(),
-      url, title,
-      tags: [...selectedTagsForSave],
-      savedAt: Date.now(),
-    };
-    savedData.links.push(targetLink);
-  }
-  const wasEdit = !!editingLinkId;
-  await persistSavedLinks();
-  closeSaveModal();
-  renderSavedFilters();
-  renderSavedList();
-  showToast(wasEdit ? '✓ Link updated' : '✓ Link saved');
-  if (targetLink) raindropSyncOnSave(targetLink, wasEdit ? 'update' : 'create');
-});
-
-// Listen for popup saves
+// Listen for pending quick links from context menu
 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.lumina_saved) {
-      savedData = changes.lumina_saved.newValue || { links: [], tags: [] };
-      renderSavedFilters();
-      renderSavedList();
-    }
     if (area === 'local' && changes.lumina_pending_quicklinks) {
       consumePendingQuickLinks();
     }
@@ -3259,36 +2711,28 @@ function initRaindropSettings() {
   connectBtn?.addEventListener('click', async () => {
     try {
       setQLStatus('Connecting…');
-      setKindlingStatus('Connecting…');
       const token = tokenInput.value.trim();
       if (!token) throw new Error('Enter a test token');
       setRaindropToken(token);
       const qlCol = await qlFindOrCreateCollection();
       if (qlCol?._id) { setQLCollectionId(qlCol._id); setQLStatus('Connected'); }
-      const kCol = await ensureRaindropCollection();
-      if (kCol) setKindlingStatus('Connected');
-      await Promise.all([qlPullSync(), raindropPullSync()]);
+      await qlPullSync();
     } catch (err) {
       setQLStatus(err.message);
-      setKindlingStatus(err.message);
     }
   });
 
   disconnectBtn?.addEventListener('click', () => {
     setRaindropToken('');
     setQLCollectionId(null);
-    setRaindropCollectionId(null);
     tokenInput.value = '';
     setQLStatus('(not connected)');
-    setKindlingStatus('(not connected)');
   });
 
   syncBtn?.addEventListener('click', () => {
     if (isQLConfigured()) qlPullSync();
-    if (isRaindropConfigured()) raindropPullSync();
   });
 
-  initKindlingSync();
   initQLSync();
 }
 
@@ -3319,57 +2763,6 @@ function buildQuickLinksMarkdown() {
     md += `- [${link.label}](${link.url})\n`;
   }
   return md;
-}
-
-function buildSavedLinksMarkdown() {
-  const links = savedData?.links || [];
-  const tags = savedData?.tags || [];
-  if (!links.length) return '# Kindling\n\n_Empty_\n';
-
-  let md = '# Kindling\n\n';
-
-  // Group by tags
-  const tagMap = new Map();
-  const untagged = [];
-  for (const link of links) {
-    if (!link.tags?.length) { untagged.push(link); continue; }
-    for (const tag of link.tags) {
-      if (!tagMap.has(tag)) tagMap.set(tag, []);
-      tagMap.get(tag).push(link);
-    }
-  }
-
-  // Render tagged sections (in tag definition order)
-  for (const tag of tags) {
-    const items = tagMap.get(tag.name);
-    if (!items?.length) continue;
-    md += `## ${tag.name}\n\n`;
-    for (const link of items) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  // Render any tags not in the tags list
-  for (const [tagName, items] of tagMap) {
-    if (tags.find(t => t.name === tagName)) continue;
-    md += `## ${tagName}\n\n`;
-    for (const link of items) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  // Render untagged
-  if (untagged.length) {
-    md += `## Untagged\n\n`;
-    for (const link of untagged) {
-      md += `- [${link.readAt ? 'x' : ' '}] [${link.title}](${link.url})\n`;
-    }
-    md += '\n';
-  }
-
-  return md.trimEnd() + '\n';
 }
 
 function downloadTextFile(filename, text, mime) {
@@ -3505,12 +2898,6 @@ function init() {
 
   // Restore sidebar states
   if (state.notesPanelOpen !== false) openNotesPanel();
-  applySavedFaviconBg(state.savedFaviconBg || 'white');
-  loadSavedLinks().then(() => {
-    renderSavedFilters();
-    renderSavedList();
-    initKindlingSync();
-  });
 
   initRaindropSettings();
   initSidePanelQuickLinks();
