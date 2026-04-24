@@ -2765,266 +2765,6 @@
       margin: 3px 0 4px;
     }
 
-    /* ─── SAVED LINKS IN PANEL ─── */
-    #saved-add-row {
-      padding: 14px 20px 0;
-      flex-shrink: 0;
-    }
-
-    #saved-add-btn {
-      width: 100%;
-      background: rgba(167, 139, 250, 0.08);
-      border: 1px dashed rgba(167, 139, 250, 0.3);
-      color: var(--accent);
-      border-radius: 10px;
-      padding: 9px;
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-
-    #saved-add-btn:hover {
-      background: rgba(167, 139, 250, 0.16);
-      border-color: rgba(167, 139, 250, 0.5);
-    }
-
-    #saved-filters {
-      display: flex;
-      gap: 6px;
-      padding: 12px 20px 0;
-      overflow-x: auto;
-      flex-shrink: 0;
-      scrollbar-width: none;
-    }
-
-    #saved-filters::-webkit-scrollbar {
-      display: none;
-    }
-
-    .saved-filter-chip {
-      padding: 4px 12px;
-      border-radius: 20px;
-      border: 1px solid var(--glass-border);
-      background: var(--glass);
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-      font-family: 'Inter', sans-serif;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .saved-filter-chip:hover {
-      background: var(--glass-hover);
-      color: var(--text);
-    }
-
-    #saved-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px 14px;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    #saved-empty {
-      text-align: center;
-      padding: 36px 20px;
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.7;
-      border: 1px dashed var(--glass-border);
-      border-radius: var(--r);
-      margin-top: 8px;
-    }
-
-    .saved-item {
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background 0.2s, transform 0.15s, border-color 0.2s;
-      animation: cardIn 0.25s ease both;
-    }
-
-    .saved-item:hover {
-      background: var(--glass-hover);
-      transform: translateY(-1px);
-      border-color: rgba(255, 255, 255, 0.18);
-    }
-
-    .saved-item-favicon {
-      width: 24px;
-      height: 24px;
-      border-radius: 6px;
-      flex-shrink: 0;
-      object-fit: cover;
-      background: var(--saved-favicon-bg, rgba(255, 255, 255, 0.92));
-    }
-
-    .fav-bg-btn {
-      width: 22px;
-      height: 22px;
-      border-radius: 5px;
-      border: 1.5px solid var(--glass-border);
-      cursor: pointer;
-      flex-shrink: 0;
-      padding: 0;
-      transition: border-color 0.15s;
-    }
-
-    .fav-bg-btn[data-bg="white"] {
-      background: rgba(255, 255, 255, 0.85);
-    }
-
-    .fav-bg-btn[data-bg="dark"] {
-      background: rgba(20, 15, 40, 0.75);
-    }
-
-    .fav-bg-btn[data-bg="transparent"] {
-      background: transparent;
-      background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%), linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%);
-      background-size: 8px 8px;
-      background-position: 0 0, 4px 4px;
-    }
-
-    .fav-bg-btn.active {
-      border-color: var(--accent);
-    }
-
-    .saved-item-favicon.fallback {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      font-family: 'Inter', sans-serif;
-    }
-
-    .saved-item-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .saved-item-title {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .saved-item-domain {
-      font-size: 10px;
-      color: var(--text-muted);
-      margin-top: 1px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .saved-item-tags {
-      display: flex;
-      gap: 3px;
-      flex-wrap: wrap;
-      margin-top: 4px;
-    }
-
-    .saved-tag-chip {
-      display: inline-flex;
-      align-items: center;
-      font-size: 9px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      padding: 2px 7px;
-      border-radius: 10px;
-      font-family: 'Inter', sans-serif;
-      border: 1px solid transparent;
-    }
-
-    .saved-item-actions {
-      display: flex;
-      gap: 2px;
-      flex-shrink: 0;
-    }
-
-    .saved-item-edit,
-    .saved-item-copy,
-    .saved-item-delete {
-      background: none;
-      border: none;
-      color: transparent;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 5px;
-      font-size: 12px;
-      transition: color 0.15s, background 0.15s;
-      flex-shrink: 0;
-    }
-
-    .saved-item-read {
-      padding: 4px;
-      background: none;
-      border: none;
-      border-radius: 5px;
-      display: inline-flex;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .saved-item.is-read .saved-item-read { color: #fbbf24 !important; }
-
-    .saved-item:hover .saved-item-edit,
-    .saved-item:hover .saved-item-copy,
-    .saved-item:hover .saved-item-read,
-    .saved-item:hover .saved-item-delete {
-      color: var(--text-muted);
-    }
-
-    .saved-item-edit:hover {
-      color: #c4b5fd !important;
-      background: rgba(167, 139, 250, 0.15);
-    }
-
-    .saved-item-copy:hover {
-      color: #a5f3fc !important;
-      background: rgba(6, 182, 212, 0.15);
-    }
-
-    .saved-item-delete:hover {
-      color: #fca5a5 !important;
-      background: rgba(239, 68, 68, 0.15);
-    }
-
-    .saved-item.is-read { opacity: 0.55; }
-    .saved-item.is-read .saved-item-title {
-      text-decoration: line-through;
-      text-decoration-color: rgba(167,139,250,0.5);
-    }
-    .saved-item-read:hover {
-      color: #fbbf24 !important;
-      background: rgba(251, 191, 36, 0.15);
-    }
-
     /* Tag color picker in modal */
     .tag-colors-row {
       display: flex;
@@ -3148,7 +2888,7 @@
       <div id="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:4px;">
         <div id="public-ip" style="font-size:10px;letter-spacing:0.12em;color:rgba(255,255,255,0.35);text-transform:uppercase;"></div>
         <div style="display:flex;gap:8px;align-items:center;">
-        <button class="icon-btn" id="notes-btn" data-tip="Notes & Kindling">
+        <button class="icon-btn" id="notes-btn" data-tip="Notes">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -3318,25 +3058,6 @@
     </div>
 
     <div class="help-section">
-      <div class="help-section-title">Kindling</div>
-      <p class="help-p">Your reading list — articles, threads, and pages you'll come back to. Open the notepad icon →
-        Kindling tab. Mark items read once you've finished; filter by <strong>Unread</strong> / <strong>Read</strong> or
-        by tag. The panel can be Light, Dark, or System themed independently of the background.</p>
-      <div class="help-row"><span class="help-row-label">Add from panel</span><span class="help-row-desc">+ Add Link
-          button inside the tab</span></div>
-      <div class="help-row"><span class="help-row-label">Save current tab</span><span class="help-row-desc">Click the
-          Lumina icon in Chrome's toolbar from any page</span></div>
-      <div class="help-row"><span class="help-row-label">Tags</span><span class="help-row-desc">Assign color-coded tags;
-          8 preset colors; create custom tags</span></div>
-      <div class="help-row"><span class="help-row-label">Filter by tag</span><span class="help-row-desc">Click a tag
-          chip in the filter row</span></div>
-      <div class="help-row"><span class="help-row-label">Sort</span><span class="help-row-desc">Newest first or A –
-          Z</span></div>
-      <div class="help-row"><span class="help-row-label">Hover actions</span><span class="help-row-desc">Copy URL ·
-          Delete</span></div>
-    </div>
-
-    <div class="help-section">
       <div class="help-section-title">Weather</div>
       <p class="help-p">Displayed in the top-left corner. Settings → Weather to configure.</p>
       <div class="help-row"><span class="help-row-label">Auto location</span><span class="help-row-desc">"Use my
@@ -3364,8 +3085,8 @@
       <div class="help-row"><span class="help-row-label">Custom wallpaper</span><span class="help-row-desc">Upload one
           or more images; filename becomes the title; edit emoji/title on the card. Only titles and selection sync (not
           image data), so sync stays small.</span></div>
-      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes/Kindling
-          panel: Dark · Light · System (follows OS)</span></div>
+      <div class="help-row"><span class="help-row-label">Panel theme</span><span class="help-row-desc">Notes panel:
+          Dark · Light · System (follows OS)</span></div>
       <div class="help-row"><span class="help-row-label">Daily Focus</span><span class="help-row-desc">Settings → Daily
           Focus — a manually curated set of focus lines that rotate daily; add your own in Settings</span></div>
       <div class="help-row"><span class="help-row-label">Greeting</span><span class="help-row-desc">Settings → Options —
@@ -3713,7 +3434,6 @@
           </div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
             <div>Quick Links: <span id="rd-ql-status" style="color:var(--text);">(not connected)</span></div>
-            <div>Kindling: <span id="rd-kindling-status" style="color:var(--text);">(not connected)</span></div>
           </div>
         </div>
 
@@ -3737,7 +3457,6 @@
       <div class="notes-tabs">
         <button class="notes-tab active" data-tab="notes">Notes</button>
         <button class="notes-tab" data-tab="quicklinks">Quick Links</button>
-        <button class="notes-tab" data-tab="saved">Kindling</button>
       </div>
       <button id="notes-theme-toggle" title="Toggle light/dark" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center;transition:color 0.2s;">
         <svg id="notes-theme-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3846,67 +3565,6 @@
       <div id="sp-ql-list" style="flex:1;overflow-y:auto;padding:0 12px 12px;"></div>
     </div>
 
-    <!-- SAVED TAB -->
-    <div id="saved-tab-content" class="notes-tab-pane">
-      <div id="saved-add-row">
-        <button id="saved-add-btn">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Link
-        </button>
-      </div>
-      <div id="saved-sort-row" style="display:flex;gap:4px;padding:8px 20px 0;flex-shrink:0;align-items:center;">
-        <button class="saved-sort-btn active" data-sort="date"
-          style="flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--glass-border);background:rgba(167,139,250,0.15);border-color:rgba(167,139,250,0.3);color:var(--text);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">Newest</button>
-        <button class="saved-sort-btn" data-sort="title"
-          style="flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-muted);font-size:11px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;">A
-          – Z</button>
-        <div style="width:1px;height:16px;background:var(--glass-border);margin:0 2px;flex-shrink:0;"></div>
-        <button class="fav-bg-btn" data-bg="white" title="Light favicon background"></button>
-        <button class="fav-bg-btn" data-bg="dark" title="Dark favicon background"></button>
-        <button class="fav-bg-btn" data-bg="transparent" title="No favicon background"></button>
-      </div>
-      <div id="saved-filters"></div>
-      <div id="saved-list">
-        <div id="saved-empty">Kindling is empty.<br><small style="opacity:0.6">Add a link from the button above, or
-            click the Lumina icon in Chrome's toolbar on any page to stash it here.</small></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SAVE LINK MODAL -->
-  <div id="saved-modal" style="display:none" class="modal-backdrop">
-    <div class="modal">
-      <h2 id="saved-modal-heading">Save Link</h2>
-      <div class="field">
-        <label>URL</label>
-        <input type="url" id="saved-modal-url" placeholder="https://example.com" />
-      </div>
-      <div class="field">
-        <label>Title <span style="opacity:0.5;font-size:10px">(optional)</span></label>
-        <input type="text" id="saved-modal-title" placeholder="Page title" />
-      </div>
-      <div class="field">
-        <label>Tags</label>
-        <div class="tag-selector-list" id="saved-tag-list"></div>
-        <div
-          style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;font-weight:600;">
-          New tag color</div>
-        <div class="tag-colors-row" id="saved-tag-colors"></div>
-        <div class="new-tag-row">
-          <input class="new-tag-input" id="saved-new-tag-input" type="text" placeholder="New tag name…"
-            maxlength="24" />
-          <button class="new-tag-add" id="saved-new-tag-add" type="button">Add Tag</button>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" id="saved-modal-cancel">Cancel</button>
-        <button class="btn btn-primary" id="saved-modal-save">Save Link</button>
-      </div>
-    </div>
   </div>
 
   <!-- EXPORT MODAL -->
