@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { storage } from '@lumina/core';
-import { markDirty, schedulePush } from '@lumina/drive';
 import type { KindlingData, KindlingItem } from '@lumina/core';
 import { KindlingItemRow } from './KindlingItem';
 import { KindlingFilters } from './KindlingFilters';
@@ -22,8 +21,6 @@ export function KindlingPanel() {
   const persist = useCallback(async (next: KindlingData) => {
     setData(next);
     await storage.setKindling(next);
-    await markDirty('kindling');
-    schedulePush();
   }, []);
 
   function handleToggleRead(id: string) {

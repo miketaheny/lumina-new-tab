@@ -1,23 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { storage } from '@lumina/core';
-import { markDirty, schedulePush } from '@lumina/drive';
 import type { LuminaSettings, WallpapersManifest } from '@lumina/core';
 import { ThemeGrid } from './settings/ThemeGrid';
 import { WallpaperGrid } from './settings/WallpaperGrid';
 import { GeneralSettings } from './settings/GeneralSettings';
-import { SyncSettings } from './settings/SyncSettings';
 import { AddressBookSettings } from './settings/AddressBookSettings';
 
-type Tab = 'themes' | 'wallpapers' | 'general' | 'autofill' | 'sync';
+type Tab = 'themes' | 'wallpapers' | 'general' | 'autofill';
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
+  onWallpaperChange?: () => void;
   onSignIn?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
 }
 
-export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, onWallpaperChange }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('themes');
   const [settings, setSettings] = useState<LuminaSettings | null>(null);
   const [wallpapers, setWallpapers] = useState<WallpapersManifest | null>(null);
@@ -33,16 +32,48 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
   const saveSettings = useCallback(async (next: LuminaSettings) => {
     setSettings(next);
     await storage.setSettings({ ...next, updatedAt: new Date().toISOString() });
-    await markDirty('settings');
-    schedulePush();
-  }, []);
+    if (next.bgMode === 'wallpaper') onWallpaperChange?.();
+  }, [onWallpaperChange]);
 
   const saveWallpapers = useCallback(async (next: WallpapersManifest) => {
     setWallpapers(next);
     await storage.setWallpapers({ ...next, updatedAt: new Date().toISOString() });
-    await markDirty('wallpapers');
-    schedulePush();
-  }, []);
+    if (settings && next.activeIds.length > 0 && settings.bgMode !== 'wallpaper') {
+      const updated = { ...settings, bgMode: 'wallpaper' as const };
+      setSettings(updated);
+      await storage.setSettings({ ...updated, updatedAt: new Date().toISOString() });
+    }
+    onWallpaperChange?.();
+  }, [onWallpaperChange, settings]);
+
+  async function handleDownloadData() {
+    const [settings, quickLinks, notes, kindling, bookmarks, snippets, wallpapers] = await Promise.all([
+      storage.getSettings(),
+      storage.getQuickLinks(),
+      storage.getNotes(),
+      storage.getKindling(),
+      storage.getBookmarks(),
+      storage.getSnippets(),
+      storage.getWallpapers(),
+    ]);
+    const data = {
+      exportedAt: new Date().toISOString(),
+      settings,
+      quickLinks,
+      notes,
+      kindling,
+      bookmarks,
+      snippets,
+      wallpapers,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lumina-export.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const [systemDark, setSystemDark] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
@@ -66,9 +97,19 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
     }}>
         <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
           <span style={{ ...panelTitleStyle, color: t.textStrong }}>Settings</span>
-          <button style={{ ...closeBtnStyle, color: t.textMuted, borderColor: t.border }} onClick={onClose} title="Close">
-            <CloseSvg />
-          </button>
+          <div style={headerActionsStyle}>
+            <button
+              style={{ ...iconBtnStyle, color: t.textMuted, borderColor: t.border }}
+              onClick={handleDownloadData}
+              title="Download local data"
+              aria-label="Download local data"
+            >
+              <DownloadSvg />
+            </button>
+            <button style={{ ...iconBtnStyle, color: t.textMuted, borderColor: t.border }} onClick={onClose} title="Close">
+              <CloseSvg />
+            </button>
+          </div>
         </div>
 
         <div style={{ ...tabBarStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
@@ -145,13 +186,6 @@ export function SettingsPanel({ open, onClose, onSignIn, onSignOut }: SettingsPa
               <AddressBookSettings />
             </section>
           )}
-
-          {activeTab === 'sync' && (
-            <section>
-              <SectionTitle>Sync</SectionTitle>
-              <SyncSettings onSignIn={onSignIn} onSignOut={onSignOut} />
-            </section>
-          )}
         </div>
       </div>
   );
@@ -166,7 +200,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'wallpapers', label: 'Wallpapers' },
   { id: 'general', label: 'General' },
   { id: 'autofill', label: 'Autofill' },
-  { id: 'sync', label: 'Sync' },
 ];
 
 const panelStyle: React.CSSProperties = {
@@ -195,7 +228,13 @@ const panelTitleStyle: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
 };
 
-const closeBtnStyle: React.CSSProperties = {
+const headerActionsStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+};
+
+const iconBtnStyle: React.CSSProperties = {
   width: 30,
   height: 30,
   borderRadius: 8,
@@ -302,6 +341,16 @@ function CloseSvg() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <line x1="18" y1="6" x2="6" y2="18"/>
       <line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  );
+}
+
+function DownloadSvg() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
     </svg>
   );
 }

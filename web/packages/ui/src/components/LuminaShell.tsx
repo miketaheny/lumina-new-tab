@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './LuminaShell.module.css';
 
 const MIN_PANEL = 360;
@@ -28,6 +28,11 @@ export function LuminaShell({
   const dragging = useRef(false);
   const [localWidth, setLocalWidth] = useState(panelWidth);
   const width = panelOpen ? localWidth : 0;
+
+  useEffect(() => {
+    document.body.classList.toggle('wallpaper-active', !!wallpaperUrl);
+    return () => document.body.classList.remove('wallpaper-active');
+  }, [wallpaperUrl]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();

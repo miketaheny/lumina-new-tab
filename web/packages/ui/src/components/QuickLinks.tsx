@@ -239,7 +239,7 @@ const hoverCss = `
 
 const containerStyle: React.CSSProperties = {
   width: '100%',
-  marginTop: 32,
+  marginTop: 44,
   animation: 'fadeUp 0.6s ease 0.4s both',
 };
 
@@ -251,7 +251,7 @@ const headerRowStyle: React.CSSProperties = {
 };
 
 const headerLabelStyle: React.CSSProperties = {
-  fontSize: 10,
+  fontSize: 9,
   fontWeight: 600,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
@@ -286,8 +286,11 @@ const iconToggleBtnStyle: React.CSSProperties = {
 
 const listStyle: React.CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 24,
 };
 
 const iconGridStyle: React.CSSProperties = {
@@ -297,7 +300,7 @@ const iconGridStyle: React.CSSProperties = {
 };
 
 const emptyStyle: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 12,
   color: 'rgba(255,255,255,0.3)',
   padding: '12px 0',
 };
@@ -307,7 +310,7 @@ const emptyAddBtnStyle: React.CSSProperties = {
   border: 'none',
   color: '#a78bfa',
   cursor: 'pointer',
-  fontSize: 13,
+  fontSize: 12,
   padding: 0,
   fontFamily: 'Inter, sans-serif',
 };

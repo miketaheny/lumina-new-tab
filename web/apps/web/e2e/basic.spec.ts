@@ -22,21 +22,19 @@ test.describe('Lumina Web Companion', () => {
     await expect(searchInput).toHaveValue('test query');
   });
 
-  test('settings panel opens via FAB button', async ({ page }) => {
+  test('settings page opens via nav button', async ({ page }) => {
     await page.goto('/');
-    const settingsBtn = page.getByRole('button', { name: /toggle settings panel/i });
+    const settingsBtn = page.getByRole('button', { name: /show settings page/i });
     await expect(settingsBtn).toBeVisible({ timeout: 10000 });
     await settingsBtn.click();
-    // SettingsPanel slides in — look for the "Themes" tab label which is always the default tab
     await expect(page.getByRole('button', { name: 'Themes' })).toBeVisible({ timeout: 5000 });
   });
 
-  test('notes panel opens via FAB button', async ({ page }) => {
+  test('notes page opens via nav button', async ({ page }) => {
     await page.goto('/');
-    const notesBtn = page.getByRole('button', { name: /toggle notes panel/i });
+    const notesBtn = page.getByRole('button', { name: /show notes page/i });
     await expect(notesBtn).toBeVisible({ timeout: 10000 });
     await notesBtn.click();
-    // NotesPanel slides in — look for the "Notes" main tab button inside the panel
     await expect(page.getByRole('button', { name: 'Notes' }).first()).toBeVisible({ timeout: 5000 });
   });
 });

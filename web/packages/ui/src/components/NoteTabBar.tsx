@@ -91,14 +91,16 @@ const tabBarStyle: React.CSSProperties = {
   alignItems: 'center',
   borderBottom: '1px solid rgba(255,255,255,0.07)',
   flexShrink: 0,
-  minHeight: 36,
-  background: 'rgba(0,0,0,0.15)',
+  minHeight: 34,
+  background: 'rgba(8,7,20,0.48)',
+  padding: '0 18px',
 };
 
 const tabsScrollStyle: React.CSSProperties = {
   display: 'flex',
   flex: 1,
   overflowX: 'auto',
+  gap: 8,
   scrollbarWidth: 'none',
   msOverflowStyle: 'none' as const,
 };
@@ -108,9 +110,10 @@ const tabStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 4,
   padding: '0 10px',
-  height: 36,
+  height: 24,
   cursor: 'pointer',
-  borderRight: '1px solid rgba(255,255,255,0.05)',
+  border: '1px solid transparent',
+  borderRadius: 8,
   flexShrink: 0,
   transition: 'background 0.1s',
   background: 'transparent',
@@ -118,14 +121,14 @@ const tabStyle: React.CSSProperties = {
 };
 
 const tabActiveStyle: React.CSSProperties = {
-  background: 'rgba(167,139,250,0.12)',
-  borderBottom: '2px solid rgba(167,139,250,0.7)',
+  background: 'rgba(124,93,196,0.28)',
+  borderColor: 'rgba(157,129,220,0.46)',
 };
 
 const tabLabelStyle: React.CSSProperties = {
-  fontSize: 12,
+  fontSize: 10,
   fontFamily: 'Inter, sans-serif',
-  color: 'rgba(255,255,255,0.65)',
+  color: 'rgba(255,255,255,0.68)',
   whiteSpace: 'nowrap',
   maxWidth: 120,
   overflow: 'hidden',
@@ -150,15 +153,15 @@ const tabDelBtnStyle: React.CSSProperties = {
 };
 
 const actionBtnStyle: React.CSSProperties = {
-  width: 28,
-  height: 28,
+  width: 22,
+  height: 22,
   margin: '0 2px',
   borderRadius: 6,
   border: '1px solid rgba(255,255,255,0.1)',
   background: 'transparent',
   color: 'rgba(255,255,255,0.45)',
   cursor: 'pointer',
-  fontSize: 16,
+  fontSize: 14,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

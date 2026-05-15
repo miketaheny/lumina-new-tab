@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { storage } from '@lumina/core';
-import { markDirty, schedulePush } from '@lumina/drive';
 import type { BookmarkNode, BookmarksData, QuickLinksData, QuickLink } from '@lumina/core';
 import { BookmarkNodeComponent } from './BookmarkNode';
 import { BookmarkModal } from './BookmarkModal';
@@ -83,8 +82,6 @@ export function BookmarksTree() {
   const persist = useCallback(async (next: BookmarksData) => {
     setData(next);
     await storage.setBookmarks(next);
-    await markDirty('bookmarks');
-    schedulePush();
   }, []);
 
   function toggleCollapsed(id: string) {

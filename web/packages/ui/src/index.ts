@@ -12,7 +12,6 @@ export { SettingsPanel } from './components/SettingsPanel';
 export { ThemeGrid } from './components/settings/ThemeGrid';
 export { WallpaperGrid } from './components/settings/WallpaperGrid';
 export { GeneralSettings } from './components/settings/GeneralSettings';
-export { SyncSettings } from './components/settings/SyncSettings';
 export { AddressBookSettings } from './components/settings/AddressBookSettings';
 export { FocusLine } from './components/FocusLine';
 export { Weather } from './components/Weather';

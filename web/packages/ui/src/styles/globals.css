@@ -144,7 +144,7 @@ body.notes-open #app {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 0 0;
+  padding: 24px 0 0;
   opacity: 0;
   animation: fadeUp 0.5s ease 0.1s forwards;
 }
@@ -155,14 +155,14 @@ body.notes-open #app {
 
 #clock {
   font-family: 'Inter', sans-serif;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
 }
 
 #date {
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: 0.12em;
   color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
@@ -200,7 +200,7 @@ body.notes-open #app {
 
 /* ─── HERO ─── */
 #hero {
-  margin-top: 64px;
+  margin-top: 76px;
   text-align: center;
   opacity: 0;
   animation: fadeUp 0.6s ease 0.2s forwards;
@@ -208,9 +208,9 @@ body.notes-open #app {
 
 #greeting {
   font-family: 'Inter', sans-serif;
-  font-size: clamp(28px, 4vw, 48px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(18px, 1.6vw, 22px);
+  font-weight: 600;
+  letter-spacing: 0.14em;
   background: linear-gradient(135deg, #fff 30%, rgba(255, 255, 255, 0.55));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -219,7 +219,7 @@ body.notes-open #app {
 }
 
 #focus {
-  font-size: 13px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   color: rgba(255, 255, 255, 0.38);
   text-transform: uppercase;
@@ -228,9 +228,9 @@ body.notes-open #app {
 
 /* ─── SEARCH BAR ─── */
 #search-wrap {
-  margin-top: 36px;
+  margin-top: 38px;
   width: 100%;
-  max-width: 640px;
+  max-width: 600px;
   opacity: 0;
   animation: fadeUp 0.6s ease 0.3s forwards;
   position: relative;
@@ -240,11 +240,11 @@ body.notes-open #app {
 #search-form {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 18px;
-  padding: 6px 6px 6px 20px;
+  padding: 5px 5px 5px 18px;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
@@ -261,7 +261,7 @@ body.notes-open #app {
   outline: none;
   color: var(--text);
   font-family: 'Inter', sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 400;
   caret-color: var(--accent);
   min-width: 0;
@@ -278,12 +278,12 @@ body.notes-open #app {
   cursor: pointer;
   color: #ffffff;
   border-radius: 12px;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 14px;
   transition: background 0.2s, transform 0.15s;
   box-shadow: none;
 }

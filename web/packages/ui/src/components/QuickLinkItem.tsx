@@ -33,17 +33,11 @@ export function QuickLinkItem({
   const bgOverride = getFaviconBgColor(link.faviconBg);
   const displayLabel = link.label || getUrlLabel(link.url);
 
-  function handleClick(e: React.MouseEvent) {
-    if ((e.target as HTMLElement).closest('button')) return;
-    window.open(link.url, '_blank');
-  }
-
   if (iconsOnly) {
     return (
       <a
         href={link.url}
         draggable
-        onClick={e => { e.preventDefault(); handleClick(e); }}
         onDragStart={e => onDragStart(e, link.id)}
         onDragOver={e => onDragOver(e, link.id)}
         onDrop={e => onDrop(e, link.id)}
@@ -85,7 +79,6 @@ export function QuickLinkItem({
     <a
       href={link.url}
       draggable
-      onClick={e => { e.preventDefault(); handleClick(e); }}
       onDragStart={e => onDragStart(e, link.id)}
       onDragOver={e => onDragOver(e, link.id)}
       onDrop={e => onDrop(e, link.id)}
@@ -101,8 +94,8 @@ export function QuickLinkItem({
         {link.iconName
           ? (
             <div style={{
-              width: 32,
-              height: 32,
+              width: 28,
+              height: 28,
               borderRadius: 8,
               background: bgOverride ?? 'rgba(255,255,255,0.08)',
               display: 'flex',
@@ -111,10 +104,10 @@ export function QuickLinkItem({
               color: 'rgba(255,255,255,0.75)',
               flexShrink: 0,
             }}>
-              <Heroicon name={link.iconName} size={16} />
+              <Heroicon name={link.iconName} size={15} />
             </div>
           )
-          : <Favicon url={link.url} label={displayLabel} size={32} bgOverride={bgOverride} />
+          : <Favicon url={link.url} label={displayLabel} size={28} bgOverride={bgOverride} />
         }
       </div>
 
@@ -164,10 +157,10 @@ const listItemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '7px 10px',
-  borderRadius: 12,
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  padding: '5px 3px',
+  borderRadius: 9,
+  background: 'transparent',
+  border: '1px solid transparent',
   textDecoration: 'none',
   color: 'rgba(255,255,255,0.75)',
   cursor: 'pointer',
@@ -176,8 +169,9 @@ const listItemStyle: React.CSSProperties = {
 };
 
 const dragHandleStyle: React.CSSProperties = {
+  display: 'none',
   color: 'rgba(255,255,255,0.2)',
-  fontSize: 14,
+  fontSize: 12,
   cursor: 'grab',
   flexShrink: 0,
   userSelect: 'none',
@@ -189,8 +183,8 @@ const infoStyle: React.CSSProperties = {
 };
 
 const listLabelStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 14,
+  fontWeight: 550,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',

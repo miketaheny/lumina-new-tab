@@ -1,5 +1,7 @@
 import type { LuminaSettings, QuickLinksData, KindlingData, BookmarksData, WallpapersManifest, SyncMeta, SnippetsData } from './types';
 
+export const BING_DAILY_WALLPAPER_URL = 'https://www.bing.com/th?id=OHR.EndangeredWhales_EN-US0380100553_1920x1080.jpg&rf=LaDigue_1920x1080.jpg&pid=hp';
+
 export const DEFAULT_SETTINGS: LuminaSettings = {
   themes: ['cosmic'],
   intensity: 'medium',
@@ -57,7 +59,7 @@ export const DEFAULT_SNIPPETS: SnippetsData = {
 
 export const DEFAULT_WALLPAPERS: WallpapersManifest = {
   wallpapers: [
-    { id: 'wp-bing', source: 'bing', label: 'Bing Daily', emoji: '🌅', isActive: false },
+    { id: 'wp-bing', source: 'bing', label: 'Bing Daily', emoji: '🌅', isActive: false, bingUrl: BING_DAILY_WALLPAPER_URL },
   ],
   activeIds: [],
   updatedAt: new Date().toISOString(),

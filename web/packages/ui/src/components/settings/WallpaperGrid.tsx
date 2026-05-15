@@ -115,7 +115,7 @@ export function WallpaperGrid({ manifest, onChange }: WallpaperGridProps) {
           const active = activeIds.includes(wp.id);
           const isEditing = editState?.id === wp.id;
           const isHovered = hoveredId === wp.id;
-          const preview = previews[wp.id];
+          const preview = previews[wp.id] ?? wp.bingUrl;
           return (
             <div
               key={wp.id}

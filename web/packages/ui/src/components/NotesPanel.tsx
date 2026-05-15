@@ -1,20 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { storage } from '@lumina/core';
-import { markDirty, schedulePush } from '@lumina/drive';
 import type { Note, LuminaSettings } from '@lumina/core';
-import { NoteEditor, type NoteEditorHandle } from './NoteEditor';
-import { NoteTabBar } from './NoteTabBar';
-
-export type NotesPanelTab = 'notes' | 'bookmarks' | 'kindling' | 'snippets';
+import { NoteEditor } from './NoteEditor';
 
 interface NotesPanelProps {
   open: boolean;
   onClose: () => void;
-  activeTab: NotesPanelTab;
-  onTabChange: (tab: NotesPanelTab) => void;
-  bookmarksSlot?: React.ReactNode;
-  kindlingSlot?: React.ReactNode;
-  snippetsSlot?: React.ReactNode;
 }
 
 function uniqueTitle(notes: Note[], base = 'untitled'): string {
@@ -28,17 +19,13 @@ function uniqueTitle(notes: Note[], base = 'untitled'): string {
 export function NotesPanel({
   open,
   onClose,
-  activeTab,
-  onTabChange,
-  bookmarksSlot,
-  kindlingSlot,
-  snippetsSlot,
 }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
-  const editorRef = useRef<NoteEditorHandle>(null);
   const pendingContentRef = useRef<Map<string, string>>(new Map());
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [panelTheme, setPanelTheme] = useState<LuminaSettings['panelTheme']>('dark');
 
   const [systemDark, setSystemDark] = useState(() =>
@@ -67,14 +54,9 @@ export function NotesPanel({
     });
   }, [open]);
 
-  const saveNotes = useCallback(async (nextNotes: Note[], dirtyIds?: string[]) => {
+  const saveNotes = useCallback(async (nextNotes: Note[], _dirtyIds?: string[]) => {
     const stamped = nextNotes.map(n => ({ ...n, updatedAt: new Date().toISOString() }));
     await storage.setNotes(stamped);
-    const ids = dirtyIds ?? stamped.map(n => n.id);
-    for (const id of ids) {
-      await markDirty('notes', id);
-    }
-    schedulePush();
   }, []);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,6 +147,20 @@ export function NotesPanel({
     });
   }
 
+  function startRename(note: Note) {
+    setRenamingId(note.id);
+    setRenameValue(note.title);
+  }
+
+  function commitRename(note: Note) {
+    const val = renameValue.trim();
+    if (val && val !== note.title) {
+      const duplicate = notes.some(n => n.id !== note.id && n.title === val);
+      if (!duplicate) renameNote(note.id, val);
+    }
+    setRenamingId(null);
+  }
+
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   if (!open) return null;
@@ -176,89 +172,84 @@ export function NotesPanel({
     }}>
       {/* Panel header */}
       <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${t.borderSubtle}` }}>
-        <div style={mainTabBarStyle}>
-          {MAIN_TABS.map(tab => (
-            <button
-              key={tab.id}
-              style={{
-                ...mainTabBtnStyle,
-                color: activeTab === tab.id ? t.accentText : t.textMuted,
-                background: activeTab === tab.id ? t.accentBg : 'transparent',
-                borderBottomColor: activeTab === tab.id ? t.accent : 'transparent',
-              }}
-              onClick={() => onTabChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div style={{ ...headerTitleStyle, color: t.textStrong }}>
+          Notes
         </div>
+        <div style={notePickerStyle}>
+          {notes.map(note => {
+            const active = note.id === activeNoteId;
+            const isRenaming = renamingId === note.id;
+            return (
+              <div
+                key={note.id}
+                style={{
+                  ...noteChipStyle,
+                  ...(active ? noteChipActiveStyle : {}),
+                  color: active ? t.accentText : t.textMuted,
+                }}
+                onDoubleClick={() => startRename(note)}
+                onClick={() => { if (!isRenaming) switchNote(note.id); }}
+              >
+                {isRenaming ? (
+                  <input
+                    style={renameInputStyle}
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => commitRename(note)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); commitRename(note); }
+                      if (e.key === 'Escape') setRenamingId(null);
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span style={noteChipLabelStyle} title="Double-click to rename">
+                    {note.title}
+                  </span>
+                )}
+                {notes.length > 1 && active && !isRenaming && (
+                  <button
+                    style={noteChipDeleteStyle}
+                    title="Delete note"
+                    onClick={e => { e.stopPropagation(); deleteNote(note.id); }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button style={{ ...headerIconBtnStyle, color: t.textMuted, borderLeftColor: t.borderSubtle }} onClick={addNote} title="New note">
+          +
+        </button>
         <button style={{ ...closeBtnStyle, color: t.textMuted, borderLeftColor: t.borderSubtle }} onClick={onClose} title="Close">
           <CloseSvg />
         </button>
       </div>
 
-      {/* Notes tab */}
-      {activeTab === 'notes' && (
-        <div style={tabContentStyle}>
-          <NoteTabBar
-            notes={notes}
-            activeNoteId={activeNoteId}
-            onSwitch={switchNote}
-            onAdd={addNote}
-            onDelete={deleteNote}
-            onRename={renameNote}
-            onClearCompleted={() => editorRef.current?.clearCompleted()}
+      <div style={tabContentStyle}>
+        {activeNote ? (
+          <NoteEditor
+            key={activeNote.id}
+            content={editorContent}
+            onChange={handleContentChange}
+            onSave={handleSave}
           />
-          {activeNote ? (
-            <NoteEditor
-              ref={editorRef}
-              key={activeNote.id}
-              content={editorContent}
-              onChange={handleContentChange}
-              onSave={handleSave}
-            />
-          ) : (
-            <div style={emptyStyle}>No notes yet. Click + to create one.</div>
-          )}
-        </div>
-      )}
-
-      {/* Bookmarks tab */}
-      {activeTab === 'bookmarks' && (
-        <div style={tabContentStyle}>
-          {bookmarksSlot ?? <div style={emptyStyle}>Bookmarks not configured.</div>}
-        </div>
-      )}
-
-      {/* Kindling tab */}
-      {activeTab === 'kindling' && (
-        <div style={tabContentStyle}>
-          {kindlingSlot ?? <div style={emptyStyle}>Kindling not configured.</div>}
-        </div>
-      )}
-
-      {/* Snippets tab */}
-      {activeTab === 'snippets' && (
-        <div style={tabContentStyle}>
-          {snippetsSlot ?? <div style={emptyStyle}>Snippets not configured.</div>}
-        </div>
-      )}
+        ) : (
+          <div style={emptyStyle}>No notes yet. Click + to create one.</div>
+        )}
+      </div>
     </div>
   );
 }
 
-const MAIN_TABS: { id: NotesPanelTab; label: string }[] = [
-  { id: 'notes', label: 'Notes' },
-  { id: 'bookmarks', label: 'Bookmarks' },
-  { id: 'kindling', label: 'Kindling' },
-  { id: 'snippets', label: 'Snippets' },
-];
-
 const panelStyle: React.CSSProperties = {
   width: '100%',
   height: '100%',
-  background: 'rgba(14,10,28,0.97)',
-  backdropFilter: 'blur(20px)',
+  background: 'rgba(8,7,20,0.97)',
+  backdropFilter: 'blur(18px)',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
@@ -269,37 +260,104 @@ const panelHeaderStyle: React.CSSProperties = {
   alignItems: 'stretch',
   borderBottom: '1px solid rgba(255,255,255,0.07)',
   flexShrink: 0,
-  minHeight: 44,
+  minHeight: 46,
 };
 
-const mainTabBarStyle: React.CSSProperties = {
+const headerTitleStyle: React.CSSProperties = {
   display: 'flex',
-  flex: 1,
+  alignItems: 'center',
+  padding: '0 22px',
+  fontSize: 11,
+  fontWeight: 500,
+  fontFamily: 'Inter, sans-serif',
+  flexShrink: 0,
 };
 
-const mainTabBtnStyle: React.CSSProperties = {
+const notePickerStyle: React.CSSProperties = {
   flex: 1,
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  overflowX: 'auto',
+  scrollbarWidth: 'none',
+  msOverflowStyle: 'none' as const,
+};
+
+const noteChipStyle: React.CSSProperties = {
+  height: 26,
+  maxWidth: 150,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '0 10px',
+  border: '1px solid transparent',
+  borderRadius: 9,
+  background: 'transparent',
+  cursor: 'pointer',
+  flexShrink: 0,
+  fontFamily: 'Inter, sans-serif',
+};
+
+const noteChipActiveStyle: React.CSSProperties = {
+  background: 'rgba(124,93,196,0.28)',
+  borderColor: 'rgba(157,129,220,0.46)',
+};
+
+const noteChipLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const noteChipDeleteStyle: React.CSSProperties = {
+  width: 15,
+  height: 15,
+  borderRadius: 3,
   border: 'none',
   background: 'transparent',
-  color: 'rgba(255,255,255,0.4)',
-  fontSize: 12,
-  fontWeight: 600,
-  fontFamily: 'Inter, sans-serif',
+  color: 'rgba(255,255,255,0.32)',
   cursor: 'pointer',
-  padding: '0 4px',
-  borderBottom: '2px solid transparent',
-  transition: 'all 0.15s',
-  letterSpacing: '0.02em',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 13,
+  padding: 0,
+  lineHeight: 1,
+  flexShrink: 0,
 };
 
-const mainTabActivStyle: React.CSSProperties = {
-  background: 'rgba(167,139,250,0.08)',
-  borderBottomColor: 'rgba(167,139,250,0.7)',
-  color: '#c4b5fd',
+const renameInputStyle: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.07)',
+  border: '1px solid rgba(167,139,250,0.5)',
+  borderRadius: 4,
+  color: 'rgba(255,255,255,0.9)',
+  fontSize: 10,
+  fontFamily: 'Inter, sans-serif',
+  padding: '1px 5px',
+  width: 84,
+  outline: 'none',
+};
+
+const headerIconBtnStyle: React.CSSProperties = {
+  width: 34,
+  height: '100%',
+  border: 'none',
+  background: 'transparent',
+  color: 'rgba(255,255,255,0.35)',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderLeft: '1px solid rgba(255,255,255,0.07)',
+  flexShrink: 0,
+  fontSize: 15,
+  lineHeight: 1,
 };
 
 const closeBtnStyle: React.CSSProperties = {
-  width: 36,
+  width: 42,
   height: '100%',
   border: 'none',
   background: 'transparent',
@@ -342,10 +400,10 @@ interface ThemeTokens {
 }
 
 const DARK_TOKENS: ThemeTokens = {
-  panelBg: 'rgba(14,10,28,0.97)',
+  panelBg: 'rgba(8,7,20,0.97)',
   border: 'rgba(255,255,255,0.1)',
   borderSubtle: 'rgba(255,255,255,0.07)',
-  textStrong: 'rgba(255,255,255,0.85)',
+  textStrong: 'rgba(255,255,255,0.82)',
   textMuted: 'rgba(255,255,255,0.4)',
   accent: 'rgba(167,139,250,0.7)',
   accentBg: 'rgba(167,139,250,0.08)',

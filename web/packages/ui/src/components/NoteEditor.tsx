@@ -103,6 +103,23 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
   if (!editor) return null;
 
   const cmd = (command: () => boolean) => { command(); editor.commands.focus(); };
+  const clearCompleted = () => {
+    const { state, dispatch } = editor.view;
+    const { tr } = state;
+    const toDelete: Array<{ from: number; to: number }> = [];
+    state.doc.descendants((node, pos) => {
+      if (node.type.name === 'taskItem' && node.attrs.checked) {
+        toDelete.push({ from: pos, to: pos + node.nodeSize });
+      }
+    });
+    for (let i = toDelete.length - 1; i >= 0; i--) {
+      tr.delete(toDelete[i].from, toDelete[i].to);
+    }
+    if (toDelete.length) {
+      dispatch(tr);
+      editor.commands.focus();
+    }
+  };
 
   return (
     <div style={editorWrapStyle} onKeyDown={handleKeyDown}>
@@ -199,6 +216,12 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         </ToolBtn>
         <Divider />
         <ToolBtn
+          title="Clear completed checklist items"
+          onClick={clearCompleted}
+        >
+          <ClearDoneSvg />
+        </ToolBtn>
+        <ToolBtn
           title="Copy as Markdown"
           onClick={() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -251,7 +274,7 @@ function ToolBtn({
 }
 
 function Divider() {
-  return <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.1)', margin: '0 2px', alignSelf: 'center', flexShrink: 0 }} />;
+  return <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.1)', margin: '0 2px', alignSelf: 'center', flexShrink: 0 }} />;
 }
 
 function HighlightSvg() {
@@ -328,6 +351,16 @@ function CopyMdSvg() {
   );
 }
 
+function ClearDoneSvg() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 11 12 14 22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      <line x1="4" y1="22" x2="22" y2="4" strokeWidth="1.5" stroke="currentColor" opacity="0.5"/>
+    </svg>
+  );
+}
+
 const editorWrapStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -339,24 +372,24 @@ const editorWrapStyle: React.CSSProperties = {
 const toolbarStyle: React.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
-  gap: 2,
-  padding: '6px 12px',
+  gap: 1,
+  padding: '7px 18px 8px',
   borderBottom: '1px solid rgba(255,255,255,0.07)',
   flexShrink: 0,
 };
 
 const toolBtnStyle: React.CSSProperties = {
-  width: 26,
-  height: 24,
+  width: 22,
+  height: 20,
   borderRadius: 5,
-  border: '1px solid rgba(255,255,255,0.08)',
+  border: '1px solid transparent',
   background: 'transparent',
-  color: 'rgba(255,255,255,0.5)',
+  color: 'rgba(255,255,255,0.43)',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 11,
+  fontSize: 9,
   fontWeight: 700,
   fontFamily: 'Inter, sans-serif',
   transition: 'all 0.1s',
@@ -372,7 +405,7 @@ const toolBtnActiveStyle: React.CSSProperties = {
 const editorContentStyle: React.CSSProperties = {
   flex: 1,
   overflowY: 'auto',
-  padding: '12px 16px',
+  padding: '14px 22px 48px',
 };
 
 const editorCss = `
@@ -380,9 +413,9 @@ const editorCss = `
   outline: none;
   min-height: 200px;
   font-family: Inter, system-ui, sans-serif;
-  font-size: 13px;
-  line-height: 1.65;
-  color: rgba(255,255,255,0.82);
+  font-size: 12px;
+  line-height: 1.48;
+  color: rgba(255,255,255,0.78);
   caret-color: #c4b5fd;
 }
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -392,10 +425,10 @@ const editorCss = `
   pointer-events: none;
   height: 0;
 }
-.ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin: 0.8em 0 0.3em; color: rgba(255,255,255,0.9); }
-.ProseMirror h2 { font-size: 1.25em; font-weight: 700; margin: 0.8em 0 0.3em; color: rgba(255,255,255,0.9); }
-.ProseMirror h3 { font-size: 1.1em; font-weight: 600; margin: 0.8em 0 0.3em; color: rgba(255,255,255,0.9); }
-.ProseMirror p { margin: 0 0 0.5em; }
+.ProseMirror h1 { font-size: 1.08em; font-weight: 700; margin: 0.75em 0 0.25em; color: rgba(255,255,255,0.9); }
+.ProseMirror h2 { font-size: 1.02em; font-weight: 700; margin: 0.7em 0 0.2em; color: rgba(255,255,255,0.88); }
+.ProseMirror h3 { font-size: 1em; font-weight: 650; margin: 0.65em 0 0.18em; color: rgba(255,255,255,0.86); }
+.ProseMirror p { margin: 0 0 0.28em; }
 .ProseMirror strong { color: rgba(255,255,255,0.95); }
 .ProseMirror em { color: rgba(255,255,255,0.8); }
 .ProseMirror mark { background: rgba(234,179,8,0.3); color: inherit; padding: 0 2px; border-radius: 2px; }
@@ -403,15 +436,18 @@ const editorCss = `
 .ProseMirror pre { background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 14px; overflow-x: auto; margin: 0.5em 0; }
 .ProseMirror pre code { background: none; padding: 0; color: rgba(255,255,255,0.82); }
 .ProseMirror blockquote { border-left: 3px solid rgba(167,139,250,0.4); padding-left: 10px; margin: 0.5em 0; color: rgba(255,255,255,0.55); font-style: italic; }
-.ProseMirror ul { padding-left: 18px; margin: 0.3em 0; }
-.ProseMirror ol { padding-left: 18px; margin: 0.3em 0; }
-.ProseMirror li { margin-bottom: 0.15em; }
-.ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
-.ProseMirror ul[data-type="taskList"] li { display: flex; align-items: baseline; gap: 6px; }
-.ProseMirror ul[data-type="taskList"] li input[type="checkbox"] { width: 13px; height: 13px; cursor: pointer; accent-color: #a78bfa; flex-shrink: 0; margin-top: 2px; }
+.ProseMirror ul { padding-left: 20px; margin: 0.28em 0; }
+.ProseMirror ol { padding-left: 20px; margin: 0.28em 0; }
+.ProseMirror li { margin-bottom: 0.08em; }
+.ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 2px; }
+.ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
+.ProseMirror ul[data-type="taskList"] li > label { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; height: 1.48em; padding-top: 1px; }
+.ProseMirror ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.ProseMirror ul[data-type="taskList"] li > div > p { margin: 0 0 0.28em; }
+.ProseMirror ul[data-type="taskList"] li input[type="checkbox"] { width: 12px; height: 12px; cursor: pointer; accent-color: #a78bfa; flex-shrink: 0; margin: 0; }
 .ProseMirror a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
-.ProseMirror td, .ProseMirror th { border: 1px solid rgba(255,255,255,0.12); padding: 4px 8px; font-size: 12px; }
+.ProseMirror td, .ProseMirror th { border: 1px solid rgba(255,255,255,0.12); padding: 4px 8px; font-size: 11px; }
 .ProseMirror th { background: rgba(255,255,255,0.05); font-weight: 600; }
 .ProseMirror hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1em 0; }
 `;

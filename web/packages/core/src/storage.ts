@@ -97,7 +97,15 @@ export const storage = {
   },
 
   async getWallpapers(): Promise<WallpapersManifest> {
-    return (await getVal<WallpapersManifest>('wallpapers')) ?? { ...DEFAULT_WALLPAPERS };
+    const stored = await getVal<WallpapersManifest>('wallpapers');
+    if (!stored) return { ...DEFAULT_WALLPAPERS };
+    return {
+      ...stored,
+      wallpapers: stored.wallpapers.map(wp => {
+        const fallback = DEFAULT_WALLPAPERS.wallpapers.find(defaultWp => defaultWp.id === wp.id);
+        return fallback ? { ...fallback, ...wp, bingUrl: wp.bingUrl ?? fallback.bingUrl } : wp;
+      }),
+    };
   },
   async setWallpapers(data: WallpapersManifest): Promise<void> {
     await setVal('wallpapers', data);
