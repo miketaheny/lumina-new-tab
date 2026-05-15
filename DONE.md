@@ -2,6 +2,13 @@
 
 ## Features
 
+- [x] FEAT: make a code snippets section like notes that supports saving / editing code snippets for running in terminal, javascript, python, etc. should support basic linting and formatting, copy / paste, and basic crud
+
+```RESULT:
+Added Snippets tab to side panel with monospace code editor supporting 15 languages, tab indentation, copy to clipboard, JSON formatting, auto-save, and full CRUD. Data persisted to IndexedDB via SnippetsData — commit: 97d04e0 2026.04.20 10:01:23
+PR: https://github.com/miketaheny/lumina-new-tab/pull/13
+```
+
 - [x] FEAT: in side-panel Bookmarks tab, add controls to create, rename, and remove chrome bookmark folders (replacing the old main-panel section add/rename/remove controls)
 
 ```RESULT:
@@ -42,6 +49,110 @@ Confirmed Asana's html_notes allowlist has no checkbox markup (kept existing tas
 
 ## Chores
 
+- [x] CHORE: move clear completed tasks by checklist item in toolbar for notes
+
+```RESULT:
+Moved clear completed button from NoteEditor toolbar to NoteTabBar. Editor exposes clearCompleted via forwardRef/useImperativeHandle — commit: c6e3e1b 2026.04.20 12:15:00
+```
+
+- [x] CHORE: main panel should not be covered when notes are expanded, it should be a split view
+
+```RESULT:
+Main content now aligns left with max-width constrained to remaining viewport when panel is open, preventing overlap — commit: f83d6be 2026.04.20 12:25:00
+```
+
+- [x] CHORE: wallpapers need to be able to be removed, also not showing up on main panel
+
+```RESULT:
+Resolved wallpaper blobs from IndexedDB into object URLs and passed to LuminaShell in both web and extension apps. Added blob cleanup on wallpaper delete. Allowed all wallpaper types (not just drive) to be removed from the grid — commit: d81af09 2026.04.17 13:32:57
+```
+- [x] CHORE: Fix Import Bookmarks feature so that it imports sub folders from the root selected.  allow for lumina bookmarks to be  moved to different folders
+
+```RESULT:
+Rebuilt Chrome bookmark import to recursively convert subtrees preserving folder structure. Added move-to-folder action on bookmarks and folders with a folder picker modal — commit: c7fb276 2026.04.17 13:37:42
+```
+- [x] CHORE: Quick Links mirrored in Bookmarks tab — show quick links as a pinned section inside the bookmarks panel above the tree
+
+```RESULT:
+Added collapsible Quick Links section above the bookmarks tree in the Bookmarks tab, loaded from storage and filtered by the search query — commit: 16c1f2f 2026.04.17 13:41:26
+```
+- [x] CHORE: Export bookmarks/links — export to Markdown, Apple Notes format, and plain text via copy-to-clipboard
+
+```RESULT:
+Added Export button with format picker (Markdown, Apple Notes, Plain Text) that formats quick links and bookmarks tree then copies to clipboard — commit: 98c9784 2026.04.17 15:14:56
+```
+- [x] CHORE: Notes — Copy as Markdown toolbar button
+
+```RESULT:
+Added Copy as Markdown button to the notes toolbar that copies note content via TipTap markdown storage — commit: 2ed9b9b 2026.04.17 15:15:55
+```
+- [x] CHORE: Notes — Copy to Apple Notes toolbar button (formats for Apple Notes paste)
+
+```RESULT:
+Added Copy for Apple Notes button that copies HTML via ClipboardItem API for rich paste in Apple Notes — commit: 52d389b 2026.04.17 15:16:35
+```
+- [x] CHORE: Notes — Clear Completed toolbar button that strips completed checklist items
+
+```RESULT:
+Added Clear Completed button that walks ProseMirror doc and deletes checked taskItem nodes — commit: 66cf091 2026.04.17 15:17:11
+```
+- [x] CHORE: Search engine dropdown ��� inline dropdown in search bar to switch engines (Google, DuckDuckGo, Bing, etc.) without going to settings
+
+```RESULT:
+Added engine picker button to search bar with dropdown to switch engines; persists to settings — commit: 9b50ee8 2026.04.17 15:18:16
+```
+- [x] CHORE: Keyboard shortcut — `/` to focus search bar
+
+```RESULT:
+Added global keydown listener that focuses search input on / press (skipped when in input/textarea/contenteditable) — commit: 47d3703 2026.04.17 15:18:51
+```
+- [x] CHORE: Keyboard shortcut — Escape to close open panels
+
+```RESULT:
+Added global Escape keydown listener in both web and extension entry points to close active panel — commit: 616b6bd 2026.04.17 15:19:33
+```
+- [x] CHORE: Panel theme — support light/dark/system theme per-panel
+
+```RESULT:
+Added 'system' option to panelTheme setting with matchMedia listener. Both panels resolve to dark/light tokens for bg, borders, and text — commit: ec164aa 2026.04.17 15:39:32
+```
+- [x] CHORE: Greeting customization — allow custom greeting text option beyond focus lines
+
+```RESULT:
+Wired greeting props (name, custom toggle, custom text) to Clock component in both entry points. Added custom greeting toggle and text input in General settings — commit: 0d183f6 2026.04.17 15:41:08
+```
+- [x] CHORE: Daily focus line editing — inline edit for focus text directly in settings panel
+
+```RESULT:
+Added Focus Line section to GeneralSettings with override text input and rotating lines textarea — commit: cc0de22 2026.04.17 15:42:00
+```
+- [x] CHORE: Content scripts — remove them completely.  if service can't accept parameter query for search copy search to clipboard and let user know to paste into new window
+
+```RESULT:
+Removed all 3 content scripts (chatgpt, claude-ai, gemini). AI engines now copy query to clipboard and show toast instead — commit: 52195fa 2026.04.20 00:00:00
+```
+- [x] CHORE: Popup — browser action popup for saving current tab URL to Kindling (extension only)
+
+```RESULT:
+Built popup with current tab info, duplicate check, and Save to Kindling button with Drive sync — commit: 032aee2 2026.04.20 00:05:00
+```
+- [x] CHORE: Background service worker — context menus ("Save to Kindling", "Add to Quick Links") (extension only)
+
+```RESULT:
+Added "Save to Kindling" and "Add to Quick Links" context menus to background service worker with duplicate detection and Drive sync — commit: ffb5379 2026.04.20 00:10:00
+```
+- [x] CHORE: Auto-fill system — form auto-fill with address book (multiple profiles), context menu trigger, field detection and mapping, settings UI for managing saved addresses
+
+```RESULT:
+Consolidated address types, added full CRUD address book UI as Autofill tab in settings, syncs entries to chrome.storage.local for background context menus — commit: 3b6dd78 2026.04.20 00:20:00
+```
+
+- [x] CHORE: Notes / Settings side panel should split with main window, not slide over, when open main panel gets smaller. let side panel drag width, save in settings (hidden).
+
+```RESULT:
+Converted side panel from position:fixed overlay to flex split layout with drag-to-resize handle. Width persists to panelWidth setting and syncs via Drive. Both web and extension updated — commit: e4e8fb7 2026.04.20 13:00:00
+```
+
 - [x] CHORE: update readme and user guide as needed based on changes
 
 ```RESULT:
@@ -79,6 +190,34 @@ Pinned tiptap caret range to ^2.27.2 (latest tested 2.x; 3.x deferred as breakin
 ```
 
 ## Refactors
+
+- [x] REFACTOR: remove asana sync completely from v1 extension
+
+```RESULT:
+Removed all Asana sync code from v1 (809 lines deleted): API functions, storage keys, markdown-HTML conversion, sync engine, settings UI, setup wizard, host permission — commit: e86217a 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/26
+```
+
+- [x] REFACTOR: remove bookmarks feature completely from v1 extension
+
+```RESULT:
+Removed all bookmarks code from v1 (750 lines deleted): chrome.bookmarks permission, Bookmarks tab, tree rendering, folder CRUD, bookmark sync modal, event listeners — commit: 390068d 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/25
+```
+
+- [x] REFACTOR: replace kindling save-for-later with raindrop.io two-way sync in v1 extension
+
+```RESULT:
+Replaced local-only Kindling storage with two-way Raindrop.io sync (~280 lines added): API client, pull/push sync engine, settings UI, token storage, popup and context menu integration. Read/unread maps to important field, tags sync bidirectionally — commit: 52580f0 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/24
+```
+
+- [x] REFACTOR: map quick links to raindrop.io quicklinks collection in v1 extension
+
+```RESULT:
+Quick Links now sync with a dedicated Raindrop.io collection (~300 lines added): API client, two-way sync on add/edit/delete/reorder, heroicon metadata stored in raindrop note field, context menu integration, pending link consumption from background script — commit: 8e2b9c7 2026.04.21 12:00:00
+PR: https://github.com/miketaheny/lumina-new-tab/pull/23
+```
 
 - [x] DONE: replace notes editor that is custom with tiptap, enable all the options so i can decide what to use, if it doesn't have the clear strikethrough / completed checkboxes, redo that. leave and update copy md, apple notes buttons
 
