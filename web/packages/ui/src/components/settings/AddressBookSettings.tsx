@@ -26,8 +26,10 @@ const CHROME_STORAGE_KEY = 'lumina_address_book';
 
 function syncToChromeStorage(entries: AddressBookEntry[]) {
   try {
-    if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
-      chrome.storage.local.set({ [CHROME_STORAGE_KEY]: entries });
+    const g = globalThis as Record<string, unknown>;
+    const c = g.chrome as { storage?: { local?: { set: (items: Record<string, unknown>) => void } } } | undefined;
+    if (c?.storage?.local) {
+      c.storage.local.set({ [CHROME_STORAGE_KEY]: entries });
     }
   } catch { /* web context — no chrome.storage */ }
 }
