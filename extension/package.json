@@ -7,7 +7,7 @@
     "watch": "node build.js --watch"
   },
   "dependencies": {
-    "@tiptap/core": "^2.27.2",
+    "@tiptap/core": "^3.33.1",
     "@tiptap/extension-highlight": "^2.27.2",
     "@tiptap/extension-link": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.27.2",
@@ -26,6 +26,6 @@
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
-    "esbuild": "^0.25.1"
+    "esbuild": "^0.28.2"
   }
 }
